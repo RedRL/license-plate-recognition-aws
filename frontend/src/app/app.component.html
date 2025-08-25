@@ -1,0 +1,29 @@
+<mat-sidenav-container fullscreen>
+
+  <mat-sidenav #start (click)="start.close()">
+    <mat-nav-list>
+
+      <a mat-list-item routerLink="upload-image">
+        <mat-icon>add_photo_alternate</mat-icon>
+        <span> Upload Image</span>
+      </a>
+
+      <a mat-list-item routerLink="query-db">
+        <mat-icon>question_answer</mat-icon>
+        <span> Query DB</span>
+      </a>
+    </mat-nav-list>
+
+  </mat-sidenav>
+
+  <mat-toolbar color="primary">
+    <button mat-icon-button (click)="start.open('mouse')">
+      <mat-icon>menu</mat-icon>
+    </button>
+  </mat-toolbar>
+
+  <div class="page-content">
+    <router-outlet></router-outlet>
+  </div>
+
+</mat-sidenav-container>

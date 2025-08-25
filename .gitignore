@@ -1,0 +1,41 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.env
+*.env
+
+# Backend runtime
+backend/uploads/
+backend/logs/
+backend/local.db
+
+# Node/Angular
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/.cache/
+
+# vcpkg (vendor package manager)
+vcpkg/
+
+# OpenALPR vendor (binaries and sources)
+OpenALPR/
+OpenALPRSource/
+New folder/
+
+# Archives
+*.zip
+
+# Local scripts outputs
+*.log 

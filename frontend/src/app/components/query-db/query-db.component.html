@@ -1,0 +1,148 @@
+<mat-card>
+    <mat-card-title>Query Database</mat-card-title>
+    <mat-card-content>
+        <form>
+            <!-- License Plate(s) Input -->
+            <mat-form-field class="license-plates" appearance="fill">
+                <mat-label>License Plate(s)</mat-label>
+                <input type="text" matInput [(ngModel)]="licensePlates" name="licensePlates"
+                    placeholder="Enter license plates separated by spaces"
+                    (keydown)="validateLicensePlateAndModel($event)">
+            </mat-form-field>
+            <br>
+
+            <!-- Color(s) Input -->
+            <mat-form-field class="attribute" appearance="fill">
+                <mat-label>Color(s)</mat-label>
+                <input type="text" matInput [(ngModel)]="colors" name="colors"
+                    placeholder="Enter colors separated by spaces" (keydown)="validateLetters($event)">
+            </mat-form-field>
+            <br>
+
+            <!-- Model(s) Input -->
+            <mat-form-field class="attribute" appearance="fill">
+                <mat-label>Model(s)</mat-label>
+                <input type="text" matInput [(ngModel)]="models" name="models"
+                    placeholder="Enter models separated by spaces" (keydown)="validateLicensePlateAndModel($event)">
+            </mat-form-field>
+            <br>
+
+            <!-- Make(s) Input -->
+            <mat-form-field class="attribute" appearance="fill">
+                <mat-label>Make(s)</mat-label>
+                <input type="text" matInput [(ngModel)]="makes" name="makes"
+                    placeholder="Enter makes separated by spaces" (keydown)="validateLetters($event)">
+            </mat-form-field>
+            <br>
+
+            <!-- Start Date and Time Inputs -->
+            <div class="time">
+                <mat-form-field appearance="fill">
+                    <mat-label>Start Date</mat-label>
+                    <input matInput [matDatepicker]="startPicker" [(ngModel)]="startDate" name="startDate"
+                        placeholder="MM/DD/YYYY" (keydown)="validateDateInput($event)"
+                        (dateChange)="onDateChange('startDate')">
+                    <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+                    <mat-datepicker #startPicker></mat-datepicker>
+                </mat-form-field>
+                
+                <div class="time-input-group">
+                    <mat-form-field appearance="fill" style="width: 100px; margin-right: 8px;">
+                        <mat-label>HH</mat-label>
+                        <input type="text" matInput [(ngModel)]="startHour" name="startHour"
+                            (input)="validateHourInput('startHour')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('startHour')" [disabled]="!isDateValid"
+                            [ngModelOptions]="{standalone: true}">
+                    </mat-form-field>
+                    <span class="time-separator">:</span>
+                    <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px; margin-right: 8px;">
+                        <mat-label>MM</mat-label>
+                        <input type="text" matInput [(ngModel)]="startMinute" name="startMinute"
+                            (input)="validateMinuteInput('startMinute')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('startMinute')" [disabled]="!isHourValid"
+                            [ngModelOptions]="{standalone: true}">
+                    </mat-form-field>
+                    <span class="time-separator">:</span>
+                    <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px;">
+                        <mat-label>SS</mat-label>
+                        <input type="text" matInput [(ngModel)]="startSecond" name="startSecond"
+                            (input)="validateSecondInput('startSecond')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('startSecond')" [disabled]="!isMinuteValid"
+                            [ngModelOptions]="{standalone: true}">
+                    </mat-form-field>
+                </div>
+            </div>
+            <br>
+
+            <!-- End Date and Time Inputs -->
+            <div class="time">
+                <mat-form-field appearance="fill">
+                    <mat-label>End Date</mat-label>
+                    <input matInput [matDatepicker]="endPicker" [(ngModel)]="endDate" name="endDate"
+                        placeholder="MM/DD/YYYY" (keydown)="validateDateInput($event)"
+                        (dateChange)="onDateChange('endDate')">
+                    <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+                    <mat-datepicker #endPicker></mat-datepicker>
+                </mat-form-field>
+                <div class="time-input-group">
+                    <mat-form-field appearance="fill" style="width: 100px; margin-right: 8px;">
+                        <mat-label>HH</mat-label>
+                        <input type="text" matInput [(ngModel)]="endHour" name="endHour"
+                            (input)="validateHourInput('endHour')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('endHour')" [disabled]="!isEndDateValid"
+                            [ngModelOptions]="{standalone: true}">
+                    </mat-form-field>
+                    <span class="time-separator">:</span>
+                    <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px; margin-right: 8px;">
+                        <mat-label>MM</mat-label>
+                        <input type="text" matInput [(ngModel)]="endMinute" name="endMinute"
+                            (input)="validateMinuteInput('endMinute')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('endMinute')" [disabled]="!isEndHourValid"
+                            [ngModelOptions]="{standalone: true}">
+                    </mat-form-field>
+                    <span class="time-separator">:</span>
+                    <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px;">
+                        <mat-label>SS</mat-label>
+                        <input type="text" matInput [(ngModel)]="endSecond" name="endSecond"
+                            (input)="validateSecondInput('endSecond')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('endSecond')" [disabled]="!isEndMinuteValid"
+                            [ngModelOptions]="{standalone: true}">
+                    </mat-form-field>
+                </div>
+            </div>
+        </form>
+    </mat-card-content>
+    <mat-card-actions>
+        <button mat-raised-button color="primary" (click)="onQuery()">Query</button>
+    </mat-card-actions>
+</mat-card>
+
+<mat-table [dataSource]="results" class="mat-elevation-z8">
+    <ng-container matColumnDef="licensePlate">
+        <th mat-header-cell *matHeaderCellDef> License Plate </th>
+        <td mat-cell *matCellDef="let element"> {{element.licensePlate}} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="color">
+        <th mat-header-cell *matHeaderCellDef> Color </th>
+        <td mat-cell *matCellDef="let element"> {{element.color}} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="model">
+        <th mat-header-cell *matHeaderCellDef> Model </th>
+        <td mat-cell *matCellDef="let element"> {{element.model}} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="make">
+        <th mat-header-cell *matHeaderCellDef> Make </th>
+        <td mat-cell *matCellDef="let element"> {{element.make}} </td>
+    </ng-container>
+
+    <ng-container matColumnDef="time">
+        <th mat-header-cell *matHeaderCellDef> Time </th>
+        <td mat-cell *matCellDef="let element"> {{element.time}} </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="['licensePlate', 'color', 'model', 'make', 'time']"></tr>
+    <tr mat-row *matRowDef="let row; columns: ['licensePlate', 'color', 'model', 'make', 'time'];"></tr>
+</mat-table>

@@ -1,0 +1,388 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: License Plate Recognition Full Infra
+
+Parameters:
+  KeyName:
+    Description: Existing EC2 KeyPair for SSH
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: license-plates-images-bucket-licenseplatestack-eu-central-1
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH + Flask (5000) + Angular (4200)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 4200
+          ToPort: 4200
+          CidrIp: 0.0.0.0/0
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-01bbe8834abc36638
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install -y python3 git
+          amazon-linux-extras install epel -y
+          yum install -y openalpr openalpr-daemon openalpr-utils libopenalpr-devel
+          pip3 install flask boto3 pymysql
+
+          curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+          yum install -y nodejs
+          npm install -g @angular/cli
+
+          # Create app directory
+          mkdir -p /home/ec2-user/app
+          cd /home/ec2-user/app
+
+          # Copy backend files
+          mkdir -p backend
+          cat > backend/app.py << 'EOF'
+          import os
+          import subprocess
+          import uuid
+          from flask import Flask, request, jsonify
+          import boto3
+          import pymysql
+
+          AWS_REGION = 'eu-central-1'
+          S3_BUCKET = 'license-plates-images-bucket-licenseplatestack-eu-central-1'
+          DB_HOST = 'license-plates-db.cluster-abcdefghijkl.eu-central-1.rds.amazonaws.com'
+          DB_USER = 'admin'
+          DB_PASSWORD = 'allYouNeedIsCloud'
+          DB_NAME = 'license_plates_db'
+
+          app = Flask(__name__)
+          s3_client = boto3.client('s3', region_name=AWS_REGION)
+
+          @app.route('/upload', methods=['POST'])
+          def upload_image():
+              if 'file' not in request.files:
+                  return jsonify({'error': 'No file uploaded'}), 400
+
+              image_file = request.files['file']
+              if image_file.filename == '':
+                  return jsonify({'error': 'Empty file name'}), 400
+
+              unique_name = f"{uuid.uuid4()}.jpg"
+              local_path = f"/tmp/{unique_name}"
+              image_file.save(local_path)
+
+              s3_client.upload_file(local_path, S3_BUCKET, unique_name)
+
+              try:
+                  alpr_output = subprocess.check_output(['alpr', '-c', 'eu', local_path], text=True)
+                  plate = parse_plate(alpr_output)
+              except subprocess.CalledProcessError as e:
+                  return jsonify({'error': f'OpenALPR failed: {e.output}'}), 500
+
+              save_to_db(plate)
+              os.remove(local_path)
+
+              return jsonify({
+                  'plate': plate,
+                  'make': None,
+                  'model': None,
+                  'color': None
+              })
+
+          def parse_plate(alpr_output):
+              lines = alpr_output.strip().split('\n')
+              if len(lines) > 1:
+                  parts = lines[1].split()
+                  if len(parts) > 1:
+                      return parts[1]
+              return None
+
+          def save_to_db(plate):
+              # TODO: Implement database save
+              pass
+
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=5000)
+          EOF
+
+          cat > backend/requirements.txt << 'EOF'
+          flask==2.3.2
+          boto3==1.34.0
+          pymysql==1.1.0
+          EOF
+
+          # Start backend
+          cd /home/ec2-user/app/backend
+          pip3 install -r requirements.txt
+          FLASK_APP=app.py nohup flask run --host=0.0.0.0 --port=5000 &
+
+          # Create Angular frontend
+          mkdir -p /home/ec2-user/app/frontend
+          cd /home/ec2-user/app/frontend
+
+          # Create a simple Angular app
+          ng new license-plate-app --routing --style=scss --skip-git --skip-tests --defaults
+          cd license-plate-app
+
+          # Install Material Design
+          ng add @angular/material --defaults
+
+          # Create components
+          ng generate component components/home
+          ng generate component components/upload-image
+          ng generate component components/query-db
+          ng generate service services/upload-image
+
+          # Update app routing
+          cat > src/app/app-routing.module.ts << 'EOF'
+          import { NgModule } from '@angular/core';
+          import { RouterModule, Routes } from '@angular/router';
+          import { HomeComponent } from './components/home/home.component';
+          import { UploadImageComponent } from './components/upload-image/upload-image.component';
+          import { QueryDbComponent } from './components/query-db/query-db.component';
+
+          const routes: Routes = [
+            { path: '', component: HomeComponent },
+            { path: 'upload', component: UploadImageComponent },
+            { path: 'query', component: QueryDbComponent },
+            { path: '**', redirectTo: '' }
+          ];
+
+          @NgModule({
+            imports: [RouterModule.forRoot(routes)],
+            exports: [RouterModule]
+          })
+          export class AppRoutingModule { }
+          EOF
+
+          # Update app component
+          cat > src/app/app.component.html << 'EOF'
+          <mat-toolbar color="primary">
+            <span>License Plate Recognition</span>
+            <span class="spacer"></span>
+            <button mat-button routerLink="/">Home</button>
+            <button mat-button routerLink="/upload">Upload</button>
+            <button mat-button routerLink="/query">Query</button>
+          </mat-toolbar>
+
+          <div class="content">
+            <router-outlet></router-outlet>
+          </div>
+          EOF
+
+          cat > src/app/app.component.scss << 'EOF'
+          .spacer {
+            flex: 1 1 auto;
+          }
+          .content {
+            padding: 20px;
+          }
+          EOF
+
+          # Update home component
+          cat > src/app/components/home/home.component.html << 'EOF'
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Welcome to License Plate Recognition</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <p>Use the navigation above to upload images or query the database.</p>
+            </mat-card-content>
+          </mat-card>
+          EOF
+
+          # Update upload component
+          cat > src/app/components/upload-image/upload-image.component.html << 'EOF'
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Upload Image</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="upload-area" (dragover)="onDragOver($event)" (drop)="onDrop($event)">
+                <mat-icon>cloud_upload</mat-icon>
+                <p>Drag and drop an image here or click to select</p>
+                <input type="file" (change)="onFileSelected($event)" hidden #fileInput>
+              </div>
+              <button mat-raised-button color="primary" (click)="fileInput.click()">
+                Select File
+              </button>
+              <div *ngIf="selectedFile">
+                <p>Selected: {{ selectedFile.name }}</p>
+              </div>
+            </mat-card-content>
+            <mat-card-actions>
+              <button mat-raised-button color="primary" [disabled]="!selectedFile" (click)="upload()">
+                Upload
+              </button>
+            </mat-card-actions>
+            <mat-progress-bar mode="indeterminate" *ngIf="uploading"></mat-progress-bar>
+          </mat-card>
+          EOF
+
+          cat > src/app/components/upload-image/upload-image.component.scss << 'EOF'
+          .upload-area {
+            border: 2px dashed #ccc;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            border-radius: 8px;
+          }
+          .upload-area:hover {
+            border-color: #007cba;
+            background: #f0f8ff;
+          }
+          EOF
+
+          cat > src/app/components/upload-image/upload-image.component.ts << 'EOF'
+          import { Component } from '@angular/core';
+          import { UploadImageService } from '../../services/upload-image.service';
+
+          @Component({
+            selector: 'app-upload-image',
+            templateUrl: './upload-image.component.html',
+            styleUrls: ['./upload-image.component.scss']
+          })
+          export class UploadImageComponent {
+            selectedFile: File | null = null;
+            uploading = false;
+
+            constructor(private uploadService: UploadImageService) {}
+
+            onFileSelected(event: any) {
+              this.selectedFile = event.target.files[0];
+            }
+
+            onDragOver(event: DragEvent) {
+              event.preventDefault();
+            }
+
+            onDrop(event: DragEvent) {
+              event.preventDefault();
+              if (event.dataTransfer?.files.length) {
+                this.selectedFile = event.dataTransfer.files[0];
+              }
+            }
+
+            upload() {
+              if (this.selectedFile) {
+                this.uploading = true;
+                this.uploadService.uploadImage(this.selectedFile).subscribe({
+                  next: () => {
+                    this.uploading = false;
+                    alert('Upload successful!');
+                  },
+                  error: () => {
+                    this.uploading = false;
+                    alert('Upload failed. Please try again.');
+                  }
+                });
+              }
+            }
+          }
+          EOF
+
+          # Update query component
+          cat > src/app/components/query-db/query-db.component.html << 'EOF'
+          <mat-card>
+            <mat-card-header>
+              <mat-card-title>Query Database</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <p>Database query functionality will be implemented here.</p>
+            </mat-card-content>
+          </mat-card>
+          EOF
+
+          # Update upload service
+          cat > src/app/services/upload-image.service.ts << 'EOF'
+          import { Injectable } from '@angular/core';
+          import { HttpClient } from '@angular/common/http';
+          import { Observable } from 'rxjs';
+
+          @Injectable({
+            providedIn: 'root'
+          })
+          export class UploadImageService {
+            private apiUrl = 'http://localhost:5000/upload';
+
+            constructor(private http: HttpClient) {}
+
+            uploadImage(file: File): Observable<any> {
+              const formData = new FormData();
+              formData.append('file', file);
+              return this.http.post(this.apiUrl, formData);
+            }
+          }
+          EOF
+
+          # Update app module
+          cat > src/app/app.module.ts << 'EOF'
+          import { NgModule } from '@angular/core';
+          import { BrowserModule } from '@angular/platform-browser';
+          import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+          import { HttpClientModule } from '@angular/common/http';
+          import { ReactiveFormsModule } from '@angular/forms';
+
+          import { MatToolbarModule } from '@angular/material/toolbar';
+          import { MatButtonModule } from '@angular/material/button';
+          import { MatCardModule } from '@angular/material/card';
+          import { MatIconModule } from '@angular/material/icon';
+          import { MatProgressBarModule } from '@angular/material/progress-bar';
+
+          import { AppRoutingModule } from './app-routing.module';
+          import { AppComponent } from './app.component';
+          import { HomeComponent } from './components/home/home.component';
+          import { UploadImageComponent } from './components/upload-image/upload-image.component';
+          import { QueryDbComponent } from './components/query-db/query-db.component';
+
+          @NgModule({
+            declarations: [
+              AppComponent,
+              HomeComponent,
+              UploadImageComponent,
+              QueryDbComponent
+            ],
+            imports: [
+              BrowserModule,
+              AppRoutingModule,
+              BrowserAnimationsModule,
+              HttpClientModule,
+              ReactiveFormsModule,
+              MatToolbarModule,
+              MatButtonModule,
+              MatCardModule,
+              MatIconModule,
+              MatProgressBarModule
+            ],
+            providers: [],
+            bootstrap: [AppComponent]
+          })
+          export class AppModule { }
+          EOF
+
+          # Start Angular
+          nohup ng serve --host=0.0.0.0 --port=4200 &
+
+Outputs:
+  S3BucketName:
+    Value: !Ref S3Bucket
+  EC2PublicIP:
+    Value: !GetAtt EC2Instance.PublicIp

@@ -1,0 +1,40 @@
+<mat-card>
+    <mat-card-title>Upload Your Image</mat-card-title>
+    <mat-card-content>
+        <div class="upload-drop-area" (dragover)="onDragOver($event)" (drop)="onDrop($event)">
+            <mat-icon>cloud_upload</mat-icon>
+            <p>Drag and drop an image here, or click to select one</p>
+            <input type="file" (change)="onFileSelected($event)" hidden #fileInput />
+        </div>
+        <button mat-button color="primary" (click)="fileInput.click()">
+            Select Image
+        </button>
+        @if (selectedFile) {
+        <div>
+            <p>Selected File: {{ selectedFile.name }}</p>
+        </div>
+        }
+    </mat-card-content>
+    <mat-card-actions>
+        <button mat-raised-button color="primary" [disabled]="!selectedFile" (click)="onUpload()">
+            Upload
+        </button>
+    </mat-card-actions>
+    @if (uploading) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    }
+    @if (result) {
+      <div class="result">
+        <h3>Recognition Result</h3>
+        <p><strong>Plate:</strong> {{ result.plate }}</p>
+        @if (result.make) { <p><strong>Make:</strong> {{ result.make }}</p> }
+        @if (result.model) { <p><strong>Model:</strong> {{ result.model }}</p> }
+        @if (result.color) { <p><strong>Color:</strong> {{ result.color }}</p> }
+      </div>
+    }
+    @if (errorMessage) {
+      <div class="error">
+        <p>{{ errorMessage }}</p>
+      </div>
+    }
+</mat-card>
