@@ -11,6 +11,7 @@ import time
 import shutil
 import sys
 from logging.handlers import RotatingFileHandler
+from plate_service import PlateService
 
 AWS_REGION = os.getenv('AWS_REGION', 'eu-central-1')
 S3_BUCKET = os.getenv('S3_BUCKET', 'license-plates-images-bucket')
@@ -52,6 +53,9 @@ app = Flask(__name__)
 s3_client = None if LOCAL_MODE else boto3.client('s3', region_name=AWS_REGION)
 
 SQLITE_PATH = os.path.join(os.path.dirname(__file__), 'local.db') if LOCAL_MODE else None
+
+# Single PlateService instance
+plate_service = PlateService()
 
 # Per-request logging
 @app.before_request
@@ -136,57 +140,25 @@ def upload_image():
     )
 
     try:
-        # Resolve ALPR binary and config
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        bundled_dir = os.path.join(repo_root, 'OpenALPR', 'openalpr-2.3.0-win-64bit', 'openalpr_64')
-        alpr_bin = shutil.which('alpr')
-        bundled_alpr = os.path.join(bundled_dir, 'alpr.exe')
-        if not alpr_bin and os.path.exists(bundled_alpr):
-            alpr_bin = bundled_alpr
-        conf_path = os.getenv('OPENALPR_CONFIG_FILE')
-        if not conf_path:
-            bundled_conf = os.path.join(bundled_dir, 'openalpr.conf')
-            if os.path.exists(bundled_conf):
-                conf_path = bundled_conf
-
-        logging.info(
-            "ALPR resolved paths: alpr_bin=%s config_file=%s bundled_dir_exists=%s",
-            alpr_bin,
-            conf_path,
-            os.path.isdir(bundled_dir),
-        )
-
-        if not alpr_bin:
-            raise FileNotFoundError('alpr binary not found on PATH or bundled directory')
-
-        alpr_args = [alpr_bin, '-j', '-n', '5', '-c', ALPR_COUNTRY, local_path]
-        logging.info("Invoking ALPR: %s", ' '.join(alpr_args))
-        env = os.environ.copy()
-        if conf_path:
-            env['OPENALPR_CONFIG_FILE'] = conf_path
-        t0 = time.time()
-        proc = subprocess.run(alpr_args, text=True, capture_output=True, timeout=20, env=env)
-        duration_ms = int((time.time() - t0) * 1000)
-        logging.info("ALPR finished in %sms with rc=%s", duration_ms, proc.returncode)
-
-        if proc.returncode != 0:
-            logging.error("ALPR error: rc=%s stderr=%s stdout=%s", proc.returncode, proc.stderr, proc.stdout)
+        result = plate_service.recognize(local_path, timeout_seconds=20)
+        if result['return_code'] != 0:
+            logging.error("ALPR error: rc=%s stderr=%s stdout=%s", result['return_code'], result['stderr'], result['stdout'])
             payload = {'error': 'OpenALPR failed'}
             if LOCAL_MODE:
                 payload['debug'] = {
-                    'return_code': proc.returncode,
-                    'stderr': proc.stderr,
-                    'stdout': proc.stdout,
-                    'duration_ms': duration_ms,
-                    'alpr_path': alpr_bin,
-                    'config_file': conf_path,
-                    'country': ALPR_COUNTRY,
+                    'return_code': result['return_code'],
+                    'stderr': result['stderr'],
+                    'stdout': result['stdout'],
+                    'duration_ms': result['duration_ms'],
+                    'alpr_path': result['alpr_path'],
+                    'config_file': result['config_file'],
+                    'country': result['country'],
                 }
             return jsonify(payload), 500
 
-        alpr_output = proc.stdout
+        alpr_output = result['stdout']
+        plate = result['plate']
         logging.debug("[ALPR] Raw output: %s", alpr_output)
-        plate = parse_plate(alpr_output)
         logging.info("[ALPR] Parsed plate: %s", plate)
 
     except subprocess.TimeoutExpired:
@@ -194,9 +166,9 @@ def upload_image():
         payload = {'error': 'OpenALPR timed out'}
         if LOCAL_MODE:
             payload['debug'] = {
-                'alpr_path': alpr_bin if 'alpr_bin' in locals() else None,
-                'config_file': conf_path if 'conf_path' in locals() else None,
-                'country': ALPR_COUNTRY,
+                'alpr_path': getattr(plate_service, 'alpr_path', None),
+                'config_file': getattr(plate_service, 'config_file', None),
+                'country': getattr(plate_service, 'country', None) or ALPR_COUNTRY,
             }
         return jsonify(payload), 504
     except Exception as e:
@@ -219,9 +191,9 @@ def upload_image():
         try:
             data = json.loads(alpr_output)
             response['debug'] = {
-                'country': ALPR_COUNTRY,
-                'alpr_path': alpr_bin if 'alpr_bin' in locals() else shutil.which('alpr'),
-                'config_file': conf_path if 'conf_path' in locals() else os.getenv('OPENALPR_CONFIG_FILE'),
+                'country': getattr(plate_service, 'country', None) or ALPR_COUNTRY,
+                'alpr_path': getattr(plate_service, 'alpr_path', None) or shutil.which('alpr'),
+                'config_file': getattr(plate_service, 'config_file', None) or os.getenv('OPENALPR_CONFIG_FILE'),
                 'results': data.get('results', []),
             }
         except Exception:
@@ -230,17 +202,15 @@ def upload_image():
     return jsonify(response)
 
 def parse_plate(alpr_output: str) -> str:
-    # Prefer JSON parsing (alpr -j) for reliable extraction
+    # Kept for backward compatibility; unused now as PlateService parses
     try:
         data = json.loads(alpr_output)
         results = data.get('results', [])
         if results:
             top = results[0]
-            # Primary plate string
             plate = top.get('plate')
             if plate:
                 return plate
-            # Fallback: best candidate if present
             candidates = top.get('candidates') or []
             if candidates:
                 best = candidates[0].get('plate')
@@ -248,8 +218,6 @@ def parse_plate(alpr_output: str) -> str:
                     return best
     except Exception:
         pass
-
-    # Fallback: legacy text parsing if JSON not available
     for line in alpr_output.splitlines():
         if line.lower().startswith('plate'):
             parts = line.split()
