@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: lpr-backend
+    environment:
+      - LOCAL_MODE=true
+      - LOG_LEVEL=DEBUG
+      - ALPR_COUNTRY=eu
+      - UPLOAD_DIR=/app/backend/uploads
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+      - ./backend/logs:/app/backend/logs
+      - ./assets:/app/assets:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lpr-frontend
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "4200:4200"
+    depends_on:
+      - backend
+    restart: unless-stopped 

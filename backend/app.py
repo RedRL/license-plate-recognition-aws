@@ -12,6 +12,7 @@ import shutil
 import sys
 from logging.handlers import RotatingFileHandler
 from plate_service import PlateService
+from vehicle_attributes_service import VehicleAttributesService
 
 AWS_REGION = os.getenv('AWS_REGION', 'eu-central-1')
 S3_BUCKET = os.getenv('S3_BUCKET', 'license-plates-images-bucket')
@@ -30,15 +31,17 @@ root_logger.setLevel(numeric_level)
 
 formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
 
-stream_handler = logging.StreamHandler(sys.stdout)
-stream_handler.setLevel(numeric_level)
-stream_handler.setFormatter(formatter)
-root_logger.addHandler(stream_handler)
-
 file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=5, encoding='utf-8')
 file_handler.setLevel(numeric_level)
 file_handler.setFormatter(formatter)
 root_logger.addHandler(file_handler)
+
+# Route Werkzeug/Flask logs to root file handler only
+for _name in ('werkzeug', 'flask.app'):
+    _logger = logging.getLogger(_name)
+    _logger.handlers.clear()
+    _logger.setLevel(numeric_level)
+    _logger.propagate = True
 
 # ALPR configuration
 ALPR_COUNTRY = os.getenv('ALPR_COUNTRY', 'eu')
@@ -56,6 +59,7 @@ SQLITE_PATH = os.path.join(os.path.dirname(__file__), 'local.db') if LOCAL_MODE 
 
 # Single PlateService instance
 plate_service = PlateService()
+vehicle_attr_service = VehicleAttributesService()
 
 # Per-request logging
 @app.before_request
@@ -175,15 +179,19 @@ def upload_image():
         logging.exception("ALPR invocation failed: %s", e)
         return jsonify({'error': f'OpenALPR invocation failed: {str(e)}'}), 500
 
+    # Analyze vehicle attributes
+    attrs = vehicle_attr_service.analyze(local_path)
+    logging.info("Vehicle attributes: make=%s model=%s color=%s", attrs.get('make'), attrs.get('model'), attrs.get('color'))
+
     save_to_db(plate, local_path if LOCAL_MODE else None)
     if os.path.exists(local_path) and not LOCAL_MODE:
         os.remove(local_path)
 
     response = {
         'plate': plate,
-        'make': None,
-        'model': None,
-        'color': None
+        'make': attrs.get('make'),
+        'model': attrs.get('model'),
+        'color': attrs.get('color')
     }
 
     # Include debug candidates in LOCAL_MODE
@@ -195,9 +203,12 @@ def upload_image():
                 'alpr_path': getattr(plate_service, 'alpr_path', None) or shutil.which('alpr'),
                 'config_file': getattr(plate_service, 'config_file', None) or os.getenv('OPENALPR_CONFIG_FILE'),
                 'results': data.get('results', []),
+                'vehicle_attributes': attrs,
             }
         except Exception:
             pass
+
+    logging.info("API response attributes: make=%s model=%s color=%s", response.get('make'), response.get('model'), response.get('color'))
 
     return jsonify(response)
 
