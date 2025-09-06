@@ -79,10 +79,10 @@ class VehicleAttributesService:
                 elif black_votes > 0 and white_votes > 0:
                     # Handle any black/white competition before going to fallback
                     if black_votes == white_votes:
-                        # Tie-breaking: use overall image brightness to decide
+                        # Tie-breaking: use overall image brightness to decide (favor white for brighter images)
                         logging.info(f"BLACK/WHITE TIE: {black_votes} each, using brightness to decide")
                         overall_brightness = np.mean(hsv[:, :, 2])
-                        if overall_brightness < 120:
+                        if overall_brightness < 100:  # Lower threshold - prefer white unless clearly dark
                             logging.info(f"TIE-BREAKER: Choosing BLACK (overall brightness: {overall_brightness:.1f})")
                             return "black"
                         else:
@@ -104,16 +104,34 @@ class VehicleAttributesService:
                 if len(sorted_colors) >= 2:
                     second_color, second_votes = sorted_colors[1]
                     
-                    # Orange vs Blue confusion: if orange is present, prefer it over blue
-                    # (blue often comes from reflections/shadows on orange cars)
-                    if best_color == "blue" and "orange" in color_votes:
-                        orange_votes = color_votes["orange"]
-                        # Be more aggressive: if ANY orange is detected, consider it over blue
-                        # Orange is less likely to be a false positive than blue on colored cars
-                        if orange_votes >= 1 and orange_votes >= total_votes * 0.2:  # At least 20% orange votes
-                            logging.info(f"ORANGE over BLUE: Resolving blue/orange confusion - orange {orange_votes}/{total_votes} votes")
-                            logging.info(f"Color detection: orange (context-aware, votes: {color_votes})")
-                            return "orange"
+                    # Blue confusion resolution: Blue often comes from reflections/shadows
+                    if best_color == "blue":
+                        # Orange vs Blue confusion - be more aggressive for orange
+                        if "orange" in color_votes:
+                            orange_votes = color_votes["orange"]
+                            # Any orange presence suggests orange car (orange less likely to be false positive)
+                            if orange_votes >= 1:
+                                logging.info(f"ORANGE over BLUE: Any orange detected overrides blue - orange {orange_votes}/{total_votes} votes")
+                                logging.info(f"Color detection: orange (orange priority, votes: {color_votes})")
+                                return "orange"
+                        
+                        # White vs Blue confusion: only override blue if achromatic evidence is STRONG
+                        white_votes = color_votes.get("white", 0)
+                        black_votes = color_votes.get("black", 0)
+                        achromatic_votes = white_votes + black_votes
+                        
+                        # Only override blue if achromatic votes are substantial AND no orange present
+                        if (achromatic_votes >= total_votes * 0.4 and  # Raised from 30% to 40%
+                            "orange" not in color_votes and  # Don't interfere with orange detection
+                            best_votes >= total_votes * 0.7):  # Only for overwhelming blue votes (4/5+)
+                            
+                            logging.info(f"ACHROMATIC over BLUE: {achromatic_votes}/{total_votes} achromatic votes, overwhelming blue {best_votes}/{total_votes}")
+                            if white_votes >= black_votes:
+                                logging.info(f"Color detection: white (strong achromatic preference, votes: {color_votes})")
+                                return "white"
+                            else:
+                                logging.info(f"Color detection: black (strong achromatic preference, votes: {color_votes})")
+                                return "black"
                     
                     # Similar logic for other common confusions could be added here
                 
