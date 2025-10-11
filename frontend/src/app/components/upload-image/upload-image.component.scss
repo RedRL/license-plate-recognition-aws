@@ -1,0 +1,43 @@
+mat-card {
+    margin: 40px auto 0 auto;
+    padding: 20px 25px;
+    max-width: 600px;
+    width: 100%;
+}
+
+mat-card-actions {
+    margin-top: 16px;
+}
+
+.title-with-icon {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    
+    mat-icon {
+        color: #666;
+        margin-left: 8px;
+    }
+}
+
+.upload-drop-area {
+    border: 2px dashed #ccc;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 30px 0 20px !important;
+    text-align: center;
+    cursor: pointer;
+    
+    p {
+        margin: 0;
+    }
+}
+
+.clickable-text {
+    color: #e91e63;
+    cursor: pointer;
+    
+    &:hover {
+        color: #c2185b;
+    }
+}

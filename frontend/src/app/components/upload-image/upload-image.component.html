@@ -1,14 +1,13 @@
 <mat-card>
-    <mat-card-title>Upload Your Image</mat-card-title>
+    <mat-card-title class="title-with-icon">
+        <span>Upload Your Image</span>
+        <mat-icon>cloud_upload</mat-icon>
+    </mat-card-title>
     <mat-card-content>
         <div class="upload-drop-area" (dragover)="onDragOver($event)" (drop)="onDrop($event)">
-            <mat-icon>cloud_upload</mat-icon>
-            <p>Drag and drop an image here, or click to select one</p>
+            <p>drag and drop an image here, or <span class="clickable-text" (click)="fileInput.click()">click</span> to select one</p>
             <input type="file" (change)="onFileSelected($event)" hidden #fileInput />
         </div>
-        <button mat-button color="primary" (click)="fileInput.click()">
-            Select Image
-        </button>
         @if (selectedFile) {
         <div>
             <p>Selected File: {{ selectedFile.name }}</p>

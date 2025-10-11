@@ -1,6 +1,7 @@
 import os
 import subprocess
 import uuid
+import datetime
 from flask import Flask, request, jsonify, g
 import boto3
 import pymysql
@@ -82,20 +83,32 @@ def _log_request_end(response):
     return response
 
 if LOCAL_MODE:
-    # Ensure local DB and table exist
+    # Ensure local DB and table exist with correct schema
     conn = sqlite3.connect(SQLITE_PATH)
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS plates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                plate_number TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                image_path TEXT
+        
+        # Check if table exists and has the correct schema
+        cur.execute("PRAGMA table_info(plates)")
+        columns = [row[1] for row in cur.fetchall()]
+        
+        # If table doesn't exist or has wrong schema, recreate it
+        expected_columns = ['id', 'timestamp', 'plate_number', 'color', 'make', 'model']
+        if not columns or columns != expected_columns:
+            logging.info("Recreating plates table with correct schema")
+            cur.execute("DROP TABLE IF EXISTS plates")
+            cur.execute(
+                """
+                CREATE TABLE plates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT (datetime('now', 'utc')),
+                    plate_number TEXT,
+                    color TEXT,
+                    make TEXT,
+                    model TEXT
+                )
+                """
             )
-            """
-        )
         conn.commit()
     finally:
         conn.close()
@@ -183,7 +196,7 @@ def upload_image():
     attrs = vehicle_attr_service.analyze(local_path)
     logging.info("Vehicle attributes: make=%s model=%s color=%s", attrs.get('make'), attrs.get('model'), attrs.get('color'))
 
-    save_to_db(plate, local_path if LOCAL_MODE else None)
+    save_to_db(plate, attrs)
     if os.path.exists(local_path) and not LOCAL_MODE:
         os.remove(local_path)
 
@@ -212,6 +225,212 @@ def upload_image():
 
     return jsonify(response)
 
+@app.route('/api/cars/query', methods=['POST'])
+def query_cars():
+    try:
+        data = request.get_json()
+        license_plates = data.get('licensePlates', [])
+        colors = data.get('colors', [])
+        makes = data.get('makes', [])
+        models = data.get('models', [])
+        query_date = data.get('queryDate')
+        query_hour = data.get('queryHour')
+        query_minute = data.get('queryMinute')
+        query_second = data.get('querySecond')
+        
+        # Build query conditions
+        conditions = []
+        params = []
+        
+        if license_plates:
+            placeholders = ','.join(['?' if LOCAL_MODE else '%s'] * len(license_plates))
+            conditions.append(f"plate_number IN ({placeholders})")
+            params.extend(license_plates)
+            
+        if colors:
+            placeholders = ','.join(['?' if LOCAL_MODE else '%s'] * len(colors))
+            conditions.append(f"color IN ({placeholders})")
+            params.extend(colors)
+            
+        if makes:
+            placeholders = ','.join(['?' if LOCAL_MODE else '%s'] * len(makes))
+            conditions.append(f"make IN ({placeholders})")
+            params.extend(makes)
+            
+        if models:
+            placeholders = ','.join(['?' if LOCAL_MODE else '%s'] * len(models))
+            conditions.append(f"model IN ({placeholders})")
+            params.extend(models)
+            
+        # Handle date filtering
+        if query_date:
+            # Convert date to string format for comparison
+            if isinstance(query_date, str):
+                if 'T' in query_date:
+                    date_str = query_date.split('T')[0]
+                else:
+                    date_str = query_date
+            else:
+                date_str = str(query_date)
+            
+            logging.info("Date filtering: query_date=%s, date_str=%s", query_date, date_str)
+            conditions.append("DATE(timestamp) = ?" if LOCAL_MODE else "DATE(timestamp) = %s")
+            params.append(date_str)
+            
+        # Handle individual time component filtering
+        if query_hour is not None:
+            conditions.append("CAST(strftime('%H', timestamp) AS INTEGER) = ?" if LOCAL_MODE else "HOUR(timestamp) = %s")
+            params.append(query_hour)
+            
+        if query_minute is not None:
+            conditions.append("CAST(strftime('%M', timestamp) AS INTEGER) = ?" if LOCAL_MODE else "MINUTE(timestamp) = %s")
+            params.append(query_minute)
+            
+        if query_second is not None:
+            conditions.append("CAST(strftime('%S', timestamp) AS INTEGER) = ?" if LOCAL_MODE else "SECOND(timestamp) = %s")
+            params.append(query_second)
+        
+        # Build query (include id for updates)
+        query = "SELECT id, timestamp, plate_number, color, make, model FROM plates"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY timestamp DESC"
+        
+        logging.info("Query: %s with params: %s", query, params)
+        
+        if LOCAL_MODE:
+            conn = sqlite3.connect(SQLITE_PATH)
+            try:
+                cur = conn.cursor()
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                
+                results = []
+                for row in rows:
+                    results.append({
+                        'id': row[0],
+                        'time': row[1],
+                        'licensePlate': row[2],
+                        'color': row[3],
+                        'make': row[4],
+                        'model': row[5]
+                    })
+                
+                logging.info("Found %d results", len(results))
+                return jsonify(results)
+            finally:
+                conn.close()
+        else:
+            # MySQL implementation
+            connection = pymysql.connect(**DATABASE_CONFIG)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(query, params)
+                    rows = cursor.fetchall()
+                    
+                    results = []
+                    for row in rows:
+                        results.append({
+                            'id': row[0],
+                            'time': row[1],
+                            'licensePlate': row[2],
+                            'color': row[3],
+                            'make': row[4],
+                            'model': row[5]
+                        })
+                    
+                    logging.info("Found %d results", len(results))
+                    return jsonify(results)
+            finally:
+                connection.close()
+                
+    except Exception as e:
+        logging.exception("Database query failed: %s", e)
+        return jsonify({'error': f'Database query failed: {str(e)}'}), 500
+
+@app.route('/api/autocomplete/<field>', methods=['GET'])
+def get_autocomplete_options(field):
+    """Get unique values for autocomplete from the database"""
+    try:
+        # Validate field name to prevent SQL injection
+        allowed_fields = ['plate_number', 'color', 'make', 'model']
+        if field not in allowed_fields:
+            return jsonify({'error': 'Invalid field'}), 400
+        
+        if LOCAL_MODE:
+            conn = sqlite3.connect(SQLITE_PATH)
+            try:
+                cur = conn.cursor()
+                cur.execute(f"SELECT DISTINCT {field} FROM plates WHERE {field} IS NOT NULL AND {field} != '' ORDER BY {field}")
+                rows = cur.fetchall()
+                options = [row[0] for row in rows if row[0]]
+                return jsonify(options)
+            finally:
+                conn.close()
+        else:
+            # MySQL implementation
+            connection = pymysql.connect(**DATABASE_CONFIG)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(f"SELECT DISTINCT {field} FROM plates WHERE {field} IS NOT NULL AND {field} != '' ORDER BY {field}")
+                    rows = cursor.fetchall()
+                    options = [row[0] for row in rows if row[0]]
+                    return jsonify(options)
+            finally:
+                connection.close()
+                
+    except Exception as e:
+        logging.exception("Autocomplete query failed: %s", e)
+        return jsonify({'error': f'Autocomplete query failed: {str(e)}'}), 500
+
+@app.route('/api/plates/<int:plate_id>', methods=['PUT'])
+def update_plate(plate_id):
+    """Update a specific plate record in the database"""
+    try:
+        data = request.get_json()
+        license_plate = data.get('licensePlate')
+        color = data.get('color')
+        make = data.get('make')
+        model = data.get('model')
+        
+        logging.info("Updating plate ID %d with data: %s", plate_id, data)
+        
+        if LOCAL_MODE:
+            conn = sqlite3.connect(SQLITE_PATH)
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE plates SET plate_number = ?, color = ?, make = ?, model = ? WHERE id = ?",
+                    (license_plate, color, make, model, plate_id)
+                )
+                if cur.rowcount == 0:
+                    return jsonify({'error': 'Record not found'}), 404
+                conn.commit()
+                logging.info("Updated plate ID %d successfully", plate_id)
+                return jsonify({'success': True, 'message': 'Record updated successfully'})
+            finally:
+                conn.close()
+        else:
+            # MySQL implementation
+            connection = pymysql.connect(**DATABASE_CONFIG)
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE plates SET plate_number = %s, color = %s, make = %s, model = %s WHERE id = %s",
+                        (license_plate, color, make, model, plate_id)
+                    )
+                    if cursor.rowcount == 0:
+                        return jsonify({'error': 'Record not found'}), 404
+                connection.commit()
+                logging.info("Updated plate ID %d successfully", plate_id)
+                return jsonify({'success': True, 'message': 'Record updated successfully'})
+            finally:
+                connection.close()
+                
+    except Exception as e:
+        logging.exception("Update failed for plate ID %d: %s", plate_id, e)
+        return jsonify({'error': f'Update failed: {str(e)}'}), 500
+
 def parse_plate(alpr_output: str) -> str:
     # Kept for backward compatibility; unused now as PlateService parses
     try:
@@ -236,17 +455,23 @@ def parse_plate(alpr_output: str) -> str:
                 return parts[1]
     return 'UNKNOWN'
 
-def save_to_db(plate, image_path=None):
+def save_to_db(plate, attrs):
+    make = attrs.get('make')
+    model = attrs.get('model')
+    color = attrs.get('color')
+    
     if LOCAL_MODE:
         conn = sqlite3.connect(SQLITE_PATH)
         try:
             cur = conn.cursor()
+            # Insert with explicit UTC timestamp
+            utc_timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             cur.execute(
-                "INSERT INTO plates (plate_number, image_path) VALUES (?, ?)",
-                (plate, image_path),
+                "INSERT INTO plates (timestamp, plate_number, color, make, model) VALUES (?, ?, ?, ?, ?)",
+                (utc_timestamp, plate, color, make, model),
             )
             conn.commit()
-            logging.info("Saved to local DB: plate=%s path=%s", plate, image_path)
+            logging.info("Saved to local DB: plate=%s color=%s make=%s model=%s", plate, color, make, model)
         finally:
             conn.close()
         return
@@ -260,13 +485,15 @@ def save_to_db(plate, image_path=None):
     )
     try:
         with connection.cursor() as cursor:
+            # Insert with explicit UTC timestamp
+            utc_timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             sql = """
-                INSERT INTO plates (plate_number, image_path)
-                VALUES (%s, %s)
+                INSERT INTO plates (timestamp, plate_number, color, make, model)
+                VALUES (%s, %s, %s, %s, %s)
             """
-            cursor.execute(sql, (plate, image_path))
+            cursor.execute(sql, (utc_timestamp, plate, color, make, model))
         connection.commit()
-        logging.info("Saved to MySQL DB: plate=%s path=%s", plate, image_path)
+        logging.info("Saved to MySQL DB: plate=%s color=%s make=%s model=%s", plate, color, make, model)
     finally:
         connection.close()
 

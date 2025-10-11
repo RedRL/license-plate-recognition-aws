@@ -1,7 +1,35 @@
 @use '@angular/material' as mat;
 
 html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+body { 
+    margin: 0; 
+    font-family: Roboto, "Helvetica Neue", sans-serif; 
+    background-color: #e6f3ff; /* Darker light blue background */
+}
+
+/* Remove pink selection highlighting from all autocomplete options globally */
+.mat-mdc-option.mat-mdc-option-active,
+.mat-mdc-option.mdc-list-item--selected:not(.mat-mdc-option-multiple):not(.mdc-list-item--disabled) {
+  background-color: transparent !important;
+}
+
+.mat-mdc-option:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Remove pink color from the text and pseudo-checkbox */
+.mat-mdc-option .mdc-list-item__primary-text {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.mat-mdc-option .mat-pseudo-checkbox {
+  display: none !important;
+}
+
+/* Set background color for main content area */
+mat-sidenav-content.mat-drawer-content.mat-sidenav-content.ng-star-inserted {
+  background-color: #e6f3ff !important; /* Darker light blue background */
+}
 
 
 @include mat.core();

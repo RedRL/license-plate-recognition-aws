@@ -14,6 +14,7 @@ services:
     volumes:
       - ./backend/uploads:/app/backend/uploads
       - ./backend/logs:/app/backend/logs
+      - ./backend/local.db:/app/backend/local.db
       - ./assets:/app/assets:ro
     restart: unless-stopped
 

@@ -23,4 +23,12 @@ export class QueryDbService {
   queryCars(filters: any): Observable<any[]> {
     return this.http.post<any[]>(`${this.carsUrl}/query`, filters);
   }
+
+  getAutocompleteOptions(field: string): Observable<string[]> {
+    return this.http.get<string[]>(`api/autocomplete/${field}`);
+  }
+
+  updatePlate(plateId: number, plateData: any): Observable<any> {
+    return this.http.put(`api/plates/${plateId}`, plateData);
+  }
 }

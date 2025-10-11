@@ -1,3 +1,5 @@
+<div class="page-container">
+    <div class="left-section">
 <mat-card>
     <mat-card-title>Query Database</mat-card-title>
     <mat-card-content>
@@ -5,107 +7,135 @@
             <!-- License Plate(s) Input -->
             <mat-form-field class="license-plates" appearance="fill">
                 <mat-label>License Plate(s)</mat-label>
-                <input type="text" matInput [(ngModel)]="licensePlates" name="licensePlates"
-                    placeholder="Enter license plates separated by spaces"
-                    (keydown)="validateLicensePlateAndModel($event)">
+                <mat-chip-grid #plateChipGrid>
+                    <mat-chip-row *ngFor="let plate of selectedLicensePlates" (removed)="removePlate(plate)">
+                        {{plate}}
+                        <button matChipRemove><mat-icon>cancel</mat-icon></button>
+                    </mat-chip-row>
+                </mat-chip-grid>
+                                <input placeholder="Type and press Enter"
+                                       [matChipInputFor]="plateChipGrid"
+                                       [matAutocomplete]="plateAuto"
+                                       [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+                                       (matChipInputTokenEnd)="addPlate($event)"
+                                       maxlength="15"
+                                       #plateInput>
+                <mat-autocomplete #plateAuto="matAutocomplete" (optionSelected)="plateSelected($event, plateInput)">
+                    <mat-option *ngFor="let option of plateOptions" [value]="option">
+                        <span>{{option}}</span>
+                        <mat-icon *ngIf="isPlateSelected(option)">check</mat-icon>
+                    </mat-option>
+                </mat-autocomplete>
             </mat-form-field>
             <br>
 
             <!-- Color(s) Input -->
             <mat-form-field class="attribute" appearance="fill">
                 <mat-label>Color(s)</mat-label>
-                <input type="text" matInput [(ngModel)]="colors" name="colors"
-                    placeholder="Enter colors separated by spaces" (keydown)="validateLetters($event)">
-            </mat-form-field>
-            <br>
-
-            <!-- Model(s) Input -->
-            <mat-form-field class="attribute" appearance="fill">
-                <mat-label>Model(s)</mat-label>
-                <input type="text" matInput [(ngModel)]="models" name="models"
-                    placeholder="Enter models separated by spaces" (keydown)="validateLicensePlateAndModel($event)">
+                <mat-chip-grid #colorChipGrid>
+                    <mat-chip-row *ngFor="let color of selectedColors" (removed)="removeColor(color)">
+                        {{color}}
+                        <button matChipRemove><mat-icon>cancel</mat-icon></button>
+                    </mat-chip-row>
+                </mat-chip-grid>
+                                <input placeholder="Type and press Enter"
+                                       [matChipInputFor]="colorChipGrid"
+                                       [matAutocomplete]="colorAuto"
+                                       [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+                                       (matChipInputTokenEnd)="addColor($event)"
+                                       maxlength="15"
+                                       #colorInput>
+                <mat-autocomplete #colorAuto="matAutocomplete" (optionSelected)="colorSelected($event, colorInput)">
+                    <mat-option *ngFor="let option of colorOptions" [value]="option">
+                        <span>{{option}}</span>
+                        <mat-icon *ngIf="isColorSelected(option)">check</mat-icon>
+                    </mat-option>
+                </mat-autocomplete>
             </mat-form-field>
             <br>
 
             <!-- Make(s) Input -->
             <mat-form-field class="attribute" appearance="fill">
                 <mat-label>Make(s)</mat-label>
-                <input type="text" matInput [(ngModel)]="makes" name="makes"
-                    placeholder="Enter makes separated by spaces" (keydown)="validateLetters($event)">
+                <mat-chip-grid #makeChipGrid>
+                    <mat-chip-row *ngFor="let make of selectedMakes" (removed)="removeMake(make)">
+                        {{make}}
+                        <button matChipRemove><mat-icon>cancel</mat-icon></button>
+                    </mat-chip-row>
+                </mat-chip-grid>
+                                <input placeholder="Type and press Enter"
+                                       [matChipInputFor]="makeChipGrid"
+                                       [matAutocomplete]="makeAuto"
+                                       [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+                                       (matChipInputTokenEnd)="addMake($event)"
+                                       maxlength="15"
+                                       #makeInput>
+                <mat-autocomplete #makeAuto="matAutocomplete" (optionSelected)="makeSelected($event, makeInput)">
+                    <mat-option *ngFor="let option of makeOptions" [value]="option">
+                        <span>{{option}}</span>
+                        <mat-icon *ngIf="isMakeSelected(option)">check</mat-icon>
+                    </mat-option>
+                </mat-autocomplete>
             </mat-form-field>
             <br>
 
-            <!-- Start Date and Time Inputs -->
-            <div class="time">
-                <mat-form-field appearance="fill">
-                    <mat-label>Start Date</mat-label>
-                    <input matInput [matDatepicker]="startPicker" [(ngModel)]="startDate" name="startDate"
-                        placeholder="MM/DD/YYYY" (keydown)="validateDateInput($event)"
-                        (dateChange)="onDateChange('startDate')">
-                    <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
-                    <mat-datepicker #startPicker></mat-datepicker>
-                </mat-form-field>
-                
-                <div class="time-input-group">
-                    <mat-form-field appearance="fill" style="width: 100px; margin-right: 8px;">
-                        <mat-label>HH</mat-label>
-                        <input type="text" matInput [(ngModel)]="startHour" name="startHour"
-                            (input)="validateHourInput('startHour')" (keydown)="validateNumbers($event)"
-                            (blur)="onBlurTimeInput('startHour')" [disabled]="!isDateValid"
-                            [ngModelOptions]="{standalone: true}">
-                    </mat-form-field>
-                    <span class="time-separator">:</span>
-                    <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px; margin-right: 8px;">
-                        <mat-label>MM</mat-label>
-                        <input type="text" matInput [(ngModel)]="startMinute" name="startMinute"
-                            (input)="validateMinuteInput('startMinute')" (keydown)="validateNumbers($event)"
-                            (blur)="onBlurTimeInput('startMinute')" [disabled]="!isHourValid"
-                            [ngModelOptions]="{standalone: true}">
-                    </mat-form-field>
-                    <span class="time-separator">:</span>
-                    <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px;">
-                        <mat-label>SS</mat-label>
-                        <input type="text" matInput [(ngModel)]="startSecond" name="startSecond"
-                            (input)="validateSecondInput('startSecond')" (keydown)="validateNumbers($event)"
-                            (blur)="onBlurTimeInput('startSecond')" [disabled]="!isMinuteValid"
-                            [ngModelOptions]="{standalone: true}">
-                    </mat-form-field>
-                </div>
-            </div>
+            <!-- Model(s) Input -->
+            <mat-form-field class="attribute" appearance="fill">
+                <mat-label>Model(s)</mat-label>
+                <mat-chip-grid #modelChipGrid>
+                    <mat-chip-row *ngFor="let model of selectedModels" (removed)="removeModel(model)">
+                        {{model}}
+                        <button matChipRemove><mat-icon>cancel</mat-icon></button>
+                    </mat-chip-row>
+                </mat-chip-grid>
+                                <input placeholder="Type and press Enter"
+                                       [matChipInputFor]="modelChipGrid"
+                                       [matAutocomplete]="modelAuto"
+                                       [matChipInputSeparatorKeyCodes]="separatorKeysCodes"
+                                       (matChipInputTokenEnd)="addModel($event)"
+                                       maxlength="15"
+                                       #modelInput>
+                <mat-autocomplete #modelAuto="matAutocomplete" (optionSelected)="modelSelected($event, modelInput)">
+                    <mat-option *ngFor="let option of modelOptions" [value]="option">
+                        <span>{{option}}</span>
+                        <mat-icon *ngIf="isModelSelected(option)">check</mat-icon>
+                    </mat-option>
+                </mat-autocomplete>
+            </mat-form-field>
             <br>
 
-            <!-- End Date and Time Inputs -->
+            <!-- Date Input -->
             <div class="time">
                 <mat-form-field appearance="fill">
-                    <mat-label>End Date</mat-label>
-                    <input matInput [matDatepicker]="endPicker" [(ngModel)]="endDate" name="endDate"
-                        placeholder="MM/DD/YYYY" (keydown)="validateDateInput($event)"
-                        (dateChange)="onDateChange('endDate')">
-                    <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
-                    <mat-datepicker #endPicker></mat-datepicker>
+                    <mat-label>Date</mat-label>
+                    <input matInput [matDatepicker]="timePicker" [(ngModel)]="timeDate" name="timeDate"
+                        placeholder="DD/MM/YYYY" (keydown)="validateDateInput($event)">
+                    <mat-datepicker-toggle matSuffix [for]="timePicker"></mat-datepicker-toggle>
+                    <mat-datepicker #timePicker></mat-datepicker>
                 </mat-form-field>
-                <div class="time-input-group">
+                
+                <div class="time-input-group" style="margin-left: 16px;">
                     <mat-form-field appearance="fill" style="width: 100px; margin-right: 8px;">
                         <mat-label>HH</mat-label>
-                        <input type="text" matInput [(ngModel)]="endHour" name="endHour"
-                            (input)="validateHourInput('endHour')" (keydown)="validateNumbers($event)"
-                            (blur)="onBlurTimeInput('endHour')" [disabled]="!isEndDateValid"
+                        <input type="text" matInput [(ngModel)]="timeHour" name="timeHour"
+                            (input)="validateHourInput('timeHour')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('timeHour')"
                             [ngModelOptions]="{standalone: true}">
                     </mat-form-field>
                     <span class="time-separator">:</span>
                     <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px; margin-right: 8px;">
                         <mat-label>MM</mat-label>
-                        <input type="text" matInput [(ngModel)]="endMinute" name="endMinute"
-                            (input)="validateMinuteInput('endMinute')" (keydown)="validateNumbers($event)"
-                            (blur)="onBlurTimeInput('endMinute')" [disabled]="!isEndHourValid"
+                        <input type="text" matInput [(ngModel)]="timeMinute" name="timeMinute"
+                            (input)="validateMinuteInput('timeMinute')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('timeMinute')"
                             [ngModelOptions]="{standalone: true}">
                     </mat-form-field>
                     <span class="time-separator">:</span>
                     <mat-form-field appearance="fill" style="width: 100px; margin-left: 8px;">
                         <mat-label>SS</mat-label>
-                        <input type="text" matInput [(ngModel)]="endSecond" name="endSecond"
-                            (input)="validateSecondInput('endSecond')" (keydown)="validateNumbers($event)"
-                            (blur)="onBlurTimeInput('endSecond')" [disabled]="!isEndMinuteValid"
+                        <input type="text" matInput [(ngModel)]="timeSecond" name="timeSecond"
+                            (input)="validateSecondInput('timeSecond')" (keydown)="validateNumbers($event)"
+                            (blur)="onBlurTimeInput('timeSecond')"
                             [ngModelOptions]="{standalone: true}">
                     </mat-form-field>
                 </div>
@@ -116,33 +146,95 @@
         <button mat-raised-button color="primary" (click)="onQuery()">Query</button>
     </mat-card-actions>
 </mat-card>
+    </div>
 
-<mat-table [dataSource]="results" class="mat-elevation-z8">
+    <div class="right-section">
+<div class="results-wrapper">
+    <div class="no-results" *ngIf="queryExecuted && results.length === 0">
+        <mat-icon>search_off</mat-icon>
+        <p>No results found</p>
+    </div>
+
+    <div class="table-container" [class.editing-mode]="editingRows.size > 0" *ngIf="results.length > 0">
+        <div class="table-header">
+            <div class="header-left">
+                <h3>Database Results</h3>
+                <div class="edit-instructions">
+                    <mat-icon>info</mat-icon>
+                    <span>Double-click to edit • Press Enter to apply changes</span>
+                </div>
+            </div>
+            <button mat-raised-button color="accent" [disabled]="actualChanges.size === 0" (click)="updateDatabase()">
+                Update Database
+            </button>
+        </div>
+        <div class="table-scroll-container">
+            <mat-table [dataSource]="results" class="mat-elevation-z8">
+    <ng-container matColumnDef="time">
+        <th mat-header-cell *matHeaderCellDef> Time </th>
+        <td mat-cell *matCellDef="let element; let i = index"> 
+            {{element.time}} 
+        </td>
+    </ng-container>
+
     <ng-container matColumnDef="licensePlate">
         <th mat-header-cell *matHeaderCellDef> License Plate </th>
-        <td mat-cell *matCellDef="let element"> {{element.licensePlate}} </td>
+        <td mat-cell *matCellDef="let element; let i = index" 
+            (dblclick)="onDoubleClick($event, element, i, 'licensePlate')">
+                                        <mat-form-field *ngIf="isEditing(i)" appearance="outline" class="edit-field">
+                                            <input matInput [(ngModel)]="element.licensePlate" (input)="onFieldChange()" 
+                                                   (keydown.enter)="saveRow(element, i)" (keydown.escape)="cancelEdit(element, i)"
+                                                   maxlength="15" [id]="'edit-licensePlate-' + i">
+                                        </mat-form-field>
+            <span *ngIf="!isEditing(i)">{{element.licensePlate}}</span>
+        </td>
     </ng-container>
 
     <ng-container matColumnDef="color">
         <th mat-header-cell *matHeaderCellDef> Color </th>
-        <td mat-cell *matCellDef="let element"> {{element.color}} </td>
-    </ng-container>
-
-    <ng-container matColumnDef="model">
-        <th mat-header-cell *matHeaderCellDef> Model </th>
-        <td mat-cell *matCellDef="let element"> {{element.model}} </td>
+        <td mat-cell *matCellDef="let element; let i = index" 
+            (dblclick)="onDoubleClick($event, element, i, 'color')">
+                                        <mat-form-field *ngIf="isEditing(i)" appearance="outline" class="edit-field">
+                                            <input matInput [(ngModel)]="element.color" (input)="onFieldChange()" 
+                                                   (keydown.enter)="saveRow(element, i)" (keydown.escape)="cancelEdit(element, i)"
+                                                   maxlength="15" [id]="'edit-color-' + i">
+                                        </mat-form-field>
+            <span *ngIf="!isEditing(i)">{{element.color}}</span>
+        </td>
     </ng-container>
 
     <ng-container matColumnDef="make">
         <th mat-header-cell *matHeaderCellDef> Make </th>
-        <td mat-cell *matCellDef="let element"> {{element.make}} </td>
+        <td mat-cell *matCellDef="let element; let i = index" 
+            (dblclick)="onDoubleClick($event, element, i, 'make')">
+                                        <mat-form-field *ngIf="isEditing(i)" appearance="outline" class="edit-field">
+                                            <input matInput [(ngModel)]="element.make" (input)="onFieldChange()" 
+                                                   (keydown.enter)="saveRow(element, i)" (keydown.escape)="cancelEdit(element, i)"
+                                                   maxlength="15" [id]="'edit-make-' + i">
+                                        </mat-form-field>
+            <span *ngIf="!isEditing(i)">{{element.make}}</span>
+        </td>
     </ng-container>
 
-    <ng-container matColumnDef="time">
-        <th mat-header-cell *matHeaderCellDef> Time </th>
-        <td mat-cell *matCellDef="let element"> {{element.time}} </td>
+    <ng-container matColumnDef="model">
+        <th mat-header-cell *matHeaderCellDef> Model </th>
+        <td mat-cell *matCellDef="let element; let i = index" 
+            (dblclick)="onDoubleClick($event, element, i, 'model')">
+                                        <mat-form-field *ngIf="isEditing(i)" appearance="outline" class="edit-field">
+                                            <input matInput [(ngModel)]="element.model" (input)="onFieldChange()" 
+                                                   (keydown.enter)="saveRow(element, i)" (keydown.escape)="cancelEdit(element, i)"
+                                                   maxlength="15" [id]="'edit-model-' + i">
+                                        </mat-form-field>
+            <span *ngIf="!isEditing(i)">{{element.model}}</span>
+        </td>
     </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="['licensePlate', 'color', 'model', 'make', 'time']"></tr>
-    <tr mat-row *matRowDef="let row; columns: ['licensePlate', 'color', 'model', 'make', 'time'];"></tr>
+    <tr mat-header-row *matHeaderRowDef="['time', 'licensePlate', 'color', 'make', 'model']"></tr>
+    <tr mat-row *matRowDef="let row; columns: ['time', 'licensePlate', 'color', 'make', 'model'];" 
+        [class.editing-row]="isEditing(results.indexOf(row))"></tr>
 </mat-table>
+        </div>
+    </div>
+</div>
+    </div>
+</div>
