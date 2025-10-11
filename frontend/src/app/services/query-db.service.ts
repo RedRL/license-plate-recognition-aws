@@ -1,13 +1,15 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class QueryDbService {
-  private carsUrl = 'api/cars';
-  private licensePlatesUrl = 'api/licensePlates';
+  private carsUrl = `${environment.apiUrl}/cars`;
+  private licensePlatesUrl = `${environment.apiUrl}/licensePlates`;
+  private apiUrl = environment.apiUrl;
 
   constructor(private http: HttpClient) {}
 
@@ -25,10 +27,10 @@ export class QueryDbService {
   }
 
   getAutocompleteOptions(field: string): Observable<string[]> {
-    return this.http.get<string[]>(`api/autocomplete/${field}`);
+    return this.http.get<string[]>(`${this.apiUrl}/autocomplete/${field}`);
   }
 
   updatePlate(plateId: number, plateData: any): Observable<any> {
-    return this.http.put(`api/plates/${plateId}`, plateData);
+    return this.http.put(`${this.apiUrl}/plates/${plateId}`, plateData);
   }
 }

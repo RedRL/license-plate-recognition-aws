@@ -38,4 +38,8 @@ New folder/
 *.zip
 
 # Local scripts outputs
-*.log 
+*.log
+
+# AWS credentials and keys
+*.pem
+lpr-keypair.pem 

@@ -12,6 +12,7 @@ import time
 import shutil
 import sys
 from logging.handlers import RotatingFileHandler
+from flask_cors import CORS
 from plate_service import PlateService
 from vehicle_attributes_service import VehicleAttributesService
 
@@ -52,7 +53,16 @@ DB_USER = os.getenv('DB_USER', 'root')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'root')
 DB_NAME = os.getenv('DB_NAME', 'license_plates_db')
 
+# Database configuration dict for pymysql
+DATABASE_CONFIG = {
+    'host': DB_HOST,
+    'user': DB_USER,
+    'password': DB_PASSWORD,
+    'database': DB_NAME
+}
+
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 s3_client = None if LOCAL_MODE else boto3.client('s3', region_name=AWS_REGION)
 
