@@ -42,4 +42,13 @@ New folder/
 
 # AWS credentials and keys
 *.pem
-lpr-keypair.pem 
+lpr-keypair.pem
+aws-credentials.txt
+
+# Temporary deployment files
+frontend-dist-*.tar.gz
+/tmp/lpr-app.tar.gz
+
+# Local development
+uploads/
+*.exe 

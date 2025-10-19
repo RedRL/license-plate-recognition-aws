@@ -1,153 +1,271 @@
-# License Plate Recognition System — AWS Cloud Deployment
+# License Plate Recognition System - AWS Deployment
 
-## ✨ **Three Ways to Deploy**
+A complete license plate recognition system deployed on AWS, featuring automatic plate detection using OpenALPR, vehicle attribute recognition, and a modern Angular frontend.
 
-### 🌐 **Option 1: AWS CloudShell (EASIEST - No Setup!)**
+## 🚀 Quick Start
 
-**100% browser-based, zero installation required!**
+### Prerequisites
+- AWS Account
+- AWS CLI installed and configured (`aws configure`)
+- Git Bash (Windows) or Bash shell (Linux/Mac)
 
-1. Open [AWS Console](https://console.aws.amazon.com/)
-2. Click the **CloudShell icon** (>_) in the top bar
-3. Run:
-   ```bash
-   git clone https://github.com/YOUR-REPO/license-plate-recognition-aws.git
-   cd license-plate-recognition-aws
-   bash deploy-cloudshell.sh
-   ```
+### Deploy to AWS
 
-**Done!** No AWS CLI, no Git, no configuration needed! 🎉
-
----
-
-### 💻 **Option 2: Local Deployment (Windows)**
-
-**Double-click:** `deploy-windows.ps1` 🖱️
-
-Or from PowerShell:
+**Windows:**
 ```powershell
-.\deploy-windows.ps1
+.\deployment\deploy-aws.ps1
+```
+
+**Linux/Mac:**
+```bash
+chmod +x deployment/deploy-aws.sh
+./deployment/deploy-aws.sh
+```
+
+That's it! The script will:
+- ✅ Create all AWS infrastructure (EC2, RDS, S3)
+- ✅ Install and configure OpenALPR
+- ✅ Deploy backend (Flask API)
+- ✅ Build and deploy frontend (Angular)
+- ✅ Initialize database
+- ✅ Configure nginx
+- ✅ Set up systemd services
+
+**Deployment time:** ~10-15 minutes
+
+After deployment, your application will be live at: `http://[EC2-IP-ADDRESS]`
+
+---
+
+## 📁 Project Structure
+
+```
+license-plate-recognition-aws/
+├── backend/
+│   ├── app.py                 # Flask API server
+│   ├── plate_service.py       # OpenALPR integration
+│   ├── vehicle_attributes_service.py  # Vehicle color detection
+│   └── requirements.txt       # Python dependencies
+├── frontend/
+│   ├── src/                   # Angular application
+│   ├── package.json           # Node dependencies
+│   └── angular.json           # Angular configuration
+└── deployment/
+    ├── deploy-aws.sh          # Main deployment script (Bash)
+    ├── deploy-aws.ps1         # Windows wrapper (PowerShell)
+    ├── update-frontend.ps1    # Quick frontend update script
+    ├── infra.yaml             # CloudFormation template
+    ├── provision-ec2.sh       # EC2 setup (OpenALPR, Python, Node)
+    └── init-db.sql            # Database schema
 ```
 
 ---
 
-### 🐧 **Option 3: Local Deployment (Linux/Mac/Git Bash)**
+## 🏗️ AWS Infrastructure
+
+The deployment creates:
+
+### **EC2 Instance (t3.micro - Free Tier)**
+- Ubuntu 22.04 LTS
+- OpenALPR for license plate recognition
+- Flask backend API
+- Angular frontend served by nginx
+- Automatic startup via systemd
+
+### **RDS MySQL (db.t3.micro - Free Tier)**
+- Stores license plate data
+- Automatic backups disabled (free tier)
+- Database: `license_plates_db`
+- Table: `plates`
+
+### **S3 Bucket**
+- Stores uploaded images
+- Automatic cleanup not configured
+
+### **Security Groups**
+- SSH access restricted to your IP
+- HTTP (port 80) open to world
+- RDS accessible only from EC2
+
+### **IAM Role**
+- EC2 instance role with S3 and RDS access
+
+---
+
+## 💻 Using the Application
+
+### Upload Images
+1. Navigate to "Upload Image" in the menu
+2. Drag & drop or click to select an image
+3. System automatically:
+   - Detects license plate using OpenALPR
+   - Identifies vehicle color
+   - Saves to RDS database
+   - Stores image in S3
+
+### Query Database
+1. Navigate to "Query Database" in the menu
+2. Filter by:
+   - License plate number
+   - Color
+   - Make
+   - Model
+   - Date/time
+3. Edit records inline by clicking the edit icon
+4. Changes save automatically to RDS
+
+---
+
+## 🔄 Updating After Deployment
+
+### Update Frontend Only (Faster)
+After making frontend changes:
+
+```powershell
+.\deployment\update-frontend.ps1
+```
+
+This builds locally and deploys to EC2 (takes ~2 minutes).
+
+### Update Backend
+SSH into EC2 and restart:
 
 ```bash
-bash deploy-interactive.sh
+ssh -i lpr-keypair.pem ubuntu@[EC2-IP]
+cd /opt/lpr-app/backend
+sudo systemctl restart lpr-backend
 ```
 
-**Requirements:** AWS CLI configured (`aws configure`)
+### Full Redeployment
+Re-run the deployment script. It will update the existing stack.
 
 ---
 
-## ✅ What This System Does
+## 🔧 Configuration
 
-- **Complete License Plate Recognition** with color detection
-- **Flask Backend** with OpenALPR (built from source)
-- **Angular Frontend** with beautiful Material Design UI
-- **RDS MySQL Database** for storing plate records
-- **S3 Storage** for uploaded images
-- **Production-Ready** AWS infrastructure (VPC, EC2, RDS, S3, IAM)
+### Environment Variables
+Located at `/opt/lpr-app/.env` on EC2:
 
-## 🎯 What Gets Deployed
-
-- **VPC** with public/private subnets across 2 availability zones
-- **EC2 t2.micro** running Flask + Angular + OpenALPR + nginx (FREE TIER eligible!)
-- **RDS MySQL db.t2.micro** in private subnet (FREE TIER eligible!)
-- **S3 Bucket** with versioning and CORS (FREE TIER included)
-- **Security Groups** and IAM roles (least privilege)
-- **Complete Application** with all features working
-
-**Cost:** 🆓 **FREE for first 12 months!** (Then ~$15/month)  
-**Deployment Time:** 20-30 minutes
-
----
-
-## 📋 Interactive Deployment
-
-The `deploy-interactive.sh` script guides you through:
-
-1. ✅ **AWS CLI check** - Verifies or helps configure
-2. ✅ **Region selection** - Choose where to deploy
-3. ✅ **Key pair setup** - Uses existing or creates new
-4. ✅ **Database password** - Secure password entry
-5. ✅ **Security config** - Auto-detects your IP
-6. ✅ **Confirmation** - Shows summary before deploying
-7. ✅ **Automatic deployment** - Does everything!
-
-### Example Run:
-```
-Which AWS region would you like to deploy to?
-  1) eu-central-1 (Frankfurt) - Default
-  2) us-east-1 (N. Virginia)
-  3) us-west-2 (Oregon)
-> 1
-
-Found existing key pairs:
-  1) my-key
-  2) Create a new key pair
-> 2
-
-Enter a name for the new key pair:
-> lpr-keypair
-
-Enter database password (min 8 characters):
-> ********
-
-Auto-detect your IP address? (yes/no)
-> yes
-
-[Shows configuration summary]
-
-Proceed with deployment? (yes/no)
-> yes
-
-[Deploys everything automatically!]
-```
-
----
-
-## 🌐 Access Your Application
-
-After deployment completes, you'll see:
-```
-==========================================
-Web Application URL: http://3.123.45.67
-==========================================
-```
-
-Open this URL in your browser!
-
-### Features Available:
-- 📸 **Upload images** with license plates
-- 🔍 **Automatic recognition** (plate + color)
-- 💾 **Database storage** of all results
-- 🔎 **Query interface** to search records
-- ✏️ **Edit entries** directly in the UI
-
-## 📋 What's Included
-- **Backend**: Flask API with OpenALPR license plate recognition
-- **Frontend**: Simple HTML interface for image upload
-- **Infrastructure**: Complete AWS setup (EC2, S3, Security Groups)
-- **Self-contained**: No external dependencies during deployment
-
-## ⚡ Features
-- **Drag & Drop**: Upload images through web interface
-- **License Plate Recognition**: Uses OpenALPR for detection
-- **S3 Storage**: Images stored in AWS S3
-- **Real-time Results**: Immediate recognition results
-
-## ✅ Clean up
 ```bash
-aws cloudformation delete-stack --stack-name LicensePlateStack
+AWS_REGION=eu-central-1
+S3_BUCKET=[auto-generated]
+DB_HOST=[rds-endpoint]
+DB_USER=admin
+DB_PASSWORD=[auto-generated]
+LOCAL_MODE=false          # Set to true for local SQLite instead of RDS
+ALPR_COUNTRY=eu           # OpenALPR country code (us, eu, au, etc.)
 ```
 
-## 🔧 Customization
-- **Modify Code**: Edit files in `backend/` and `frontend/` directories
-- **Redeploy**: Run deployment script again
-- **Update**: Changes are embedded in the CloudFormation template
+### Database Access
+Connection details saved in `aws-credentials.txt` after deployment.
 
-## 📌 Notes
-- **OpenALPR Community** doesn't provide make/model/color detection
-- **EC2 Instance**: t2.micro (free tier eligible)
-- **Region**: eu-central-1 (modify in infra.yaml if needed)
+To connect from EC2:
+```bash
+mysql -h [DB_ENDPOINT] -u admin -p[PASSWORD] license_plates_db
+```
+
+---
+
+## 🧹 Cleanup / Teardown
+
+To delete all AWS resources:
+
+```bash
+# Delete CloudFormation stack
+aws cloudformation delete-stack --stack-name LicensePlateStack --region eu-central-1
+
+# Delete S3 bucket (must be empty first)
+aws s3 rm s3://[BUCKET-NAME] --recursive
+aws s3 rb s3://[BUCKET-NAME]
+
+# Delete EC2 key pair
+aws ec2 delete-key-pair --key-name lpr-keypair --region eu-central-1
+rm lpr-keypair.pem
+```
+
+---
+
+## 💰 Cost Estimate
+
+Using AWS Free Tier:
+- **EC2 t3.micro**: Free for first 12 months (750 hours/month)
+- **RDS db.t3.micro**: Free for first 12 months (750 hours/month)
+- **S3 Storage**: First 5GB free
+- **Data Transfer**: First 100GB free
+
+**After free tier expires:** ~$15-20/month if running 24/7
+
+**Cost saving tip:** Stop EC2 and RDS when not in use (no charges when stopped).
+
+---
+
+## 🐛 Troubleshooting
+
+### Deployment fails with "Stack in ROLLBACK_COMPLETE"
+The script automatically handles this. If it persists, manually delete the stack:
+```bash
+aws cloudformation delete-stack --stack-name LicensePlateStack --region eu-central-1
+```
+
+### Cannot connect to EC2
+- Check security group allows your IP
+- Verify key pair file permissions: `chmod 400 lpr-keypair.pem`
+- Your IP might have changed (update security group)
+
+### Frontend returns 500 errors
+Check backend logs on EC2:
+```bash
+ssh -i lpr-keypair.pem ubuntu@[EC2-IP]
+tail -50 /opt/lpr-app/backend/logs/app.log
+```
+
+### Database connection errors
+- Verify RDS is running in AWS Console
+- Check password in `/opt/lpr-app/.env`
+- Ensure security group allows EC2 -> RDS connection
+
+### OpenALPR not detecting plates
+- Works best with clear, front-facing plate images
+- Supports multiple countries (set `ALPR_COUNTRY` in `.env`)
+- Detection accuracy varies by image quality
+
+---
+
+## 🔐 Security Notes
+
+- **SSH Key**: Stored as `lpr-keypair.pem` - **Keep this secure!**
+- **DB Password**: Auto-generated, saved in `aws-credentials.txt`
+- **S3 Bucket**: Not publicly accessible (IAM role-based access)
+- **RDS**: Not publicly accessible (VPC-only)
+- **HTTP Only**: Consider adding HTTPS with Let's Encrypt for production
+
+---
+
+## 📚 Technologies Used
+
+- **Backend**: Python 3, Flask, OpenALPR, PyMySQL, Boto3
+- **Frontend**: Angular 19, Angular Material, TypeScript
+- **Database**: MySQL 8.0 (RDS)
+- **Storage**: Amazon S3
+- **Compute**: EC2 Ubuntu 22.04
+- **Web Server**: nginx
+- **Infrastructure**: AWS CloudFormation
+
+---
+
+## 📄 License
+
+This project is provided as-is for educational and demonstration purposes.
+
+---
+
+## 🤝 Support
+
+For issues or questions:
+1. Check the troubleshooting section above
+2. Review AWS CloudFormation stack events in AWS Console
+3. Check application logs on EC2
+
+---
+
+**Enjoy your AWS-powered License Plate Recognition system!** 🚗📸
