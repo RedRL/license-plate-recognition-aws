@@ -8,6 +8,7 @@ import { environment } from '../../environments/environment';
 })
 export class UploadImageService {
   private uploadUrl = `${environment.apiUrl}/upload`;
+  private queryUrl = `${environment.apiUrl}/cars/query`;
 
   constructor(private http: HttpClient) {}
 
@@ -15,5 +16,9 @@ export class UploadImageService {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<any>(this.uploadUrl, formData);
+  }
+
+  queryDatabase(query: any): Observable<any[]> {
+    return this.http.post<any[]>(this.queryUrl, query);
   }
 }
