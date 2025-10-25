@@ -18,6 +18,8 @@ from vehicle_attributes_service import VehicleAttributesService
 
 AWS_REGION = os.getenv('AWS_REGION', 'eu-central-1')
 S3_BUCKET = os.getenv('S3_BUCKET', 'license-plates-images-bucket')
+SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL', '')
+ASYNC_PROCESSING = os.getenv('ASYNC_PROCESSING', 'false').lower() == 'true'
 LOCAL_MODE = os.getenv('LOCAL_MODE', 'false').lower() == 'true'
 UPLOAD_DIR = os.getenv('UPLOAD_DIR', 'uploads')
 
@@ -47,6 +49,10 @@ for _name in ('werkzeug', 'flask.app'):
 
 # ALPR configuration
 ALPR_COUNTRY = os.getenv('ALPR_COUNTRY', 'eu')
+
+# AWS clients
+sqs_client = None if LOCAL_MODE else boto3.client('sqs', region_name=AWS_REGION)
+s3_client = None if LOCAL_MODE else boto3.client('s3', region_name=AWS_REGION)
 
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_USER = os.getenv('DB_USER', 'root')
@@ -166,6 +172,39 @@ def upload_image():
         shutil.which('alpr'),
     )
 
+    # Check if async processing is enabled
+    if ASYNC_PROCESSING and not LOCAL_MODE:
+        # Send expect a 202 Accepted response with processing status
+        timestamp = datetime.datetime.now().isoformat()
+        
+        # Send message to SQS queue
+        try:
+            message_body = {
+                'image_key': unique_name,
+                'timestamp': timestamp,
+                'bucket': S3_BUCKET
+            }
+            
+            sqs_client.send_message(
+                QueueUrl=SQS_QUEUE_URL,
+                MessageBody=json.dumps(message_body)
+            )
+            
+            logging.info("Message sent to SQS queue for async processing: %s", unique_name)
+            
+            response = {
+                'status': 'processing',
+                'timestamp': timestamp,
+                'key': unique_name
+            }
+            
+            return jsonify(response), 202
+            
+        except Exception as e:
+            logging.exception("Failed to send message to SQS queue: %s", e)
+            return jsonify({'error': 'Failed to queue processing request'}), 500
+    
+    # Synchronous processing (fallback or LOCAL_MODE)
     try:
         result = plate_service.recognize(local_path, timeout_seconds=20)
         if result['return_code'] != 0:

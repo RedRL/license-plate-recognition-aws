@@ -52,7 +52,9 @@ sudo apt-get install -y \
     liblog4cplus-dev \
     libcurl4-openssl-dev \
     wget \
-    unzip
+    unzip \
+    mysql-client \
+    netcat-openbsd
 
 # Build and install OpenALPR from source
 log_info "Building OpenALPR from source..."
@@ -129,6 +131,29 @@ Restart=always
 RestartSec=10
 StandardOutput=append:/opt/lpr-app/backend/logs/backend.log
 StandardError=append:/opt/lpr-app/backend/logs/backend-error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Set up systemd service for SQS worker
+log_info "Setting up SQS worker service..."
+sudo tee /etc/systemd/system/lpr-worker.service > /dev/null << 'EOF'
+[Unit]
+Description=License Plate Recognition SQS Worker
+After=network.target lpr-backend.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/lpr-app/backend
+EnvironmentFile=/opt/lpr-app/.env
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/usr/bin/python3 /opt/lpr-app/backend/worker.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/lpr-app/backend/logs/worker.log
+StandardError=append:/opt/lpr-app/backend/logs/worker-error.log
 
 [Install]
 WantedBy=multi-user.target

@@ -355,6 +355,31 @@ Resources:
         - Key: Name
           Value: LPR-EC2-Instance
 
+  # Dead Letter Queue for failed messages
+  SQSDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: lpr-dlq
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Name
+          Value: LPR-DeadLetter-Queue
+
+  # SQS Queue for async processing
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: lpr-processing-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SQSDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: LPR-Processing-Queue
+
 Outputs:
   EC2PublicIP:
     Description: Public IP address of the EC2 instance
@@ -383,4 +408,16 @@ Outputs:
     Value: !GetAtt DBInstance.Endpoint.Address
     Export:
       Name: !Sub '${AWS::StackName}-DB-Endpoint'
+  
+  SQSQueueURL:
+    Description: SQS queue URL for async processing
+    Value: !Ref SQSQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-SQS-QueueURL'
+  
+  SQSDeadLetterQueueURL:
+    Description: SQS dead letter queue URL for failed messages
+    Value: !Ref SQSDeadLetterQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-SQS-DLQ-URL'
   

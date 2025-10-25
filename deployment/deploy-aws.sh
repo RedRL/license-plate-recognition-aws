@@ -24,7 +24,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 STACK_NAME="LicensePlateStack"
 REGION="eu-central-1"
-KEY_NAME="lpr-keypair"
+KEY_NAME="lpr-keypair-sshfix"
+KEY_FILE="${SCRIPT_DIR}/${KEY_NAME}.pem"
 
 echo -e "${CYAN}"
 echo "╔════════════════════════════════════════════════════════════════╗"
@@ -136,7 +137,7 @@ aws cloudformation deploy \
     --template-file deployment/infra.yaml \
     --stack-name "$STACK_NAME" \
     --region "$REGION" \
-    --capabilities CAPABILITY_IAM \
+    --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
     --parameter-overrides \
         KeyName="$KEY_NAME" \
         SSHLocation="$SSH_CIDR" \
@@ -165,6 +166,13 @@ S3_BUCKET=$(aws cloudformation describe-stacks \
     --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
     --output text)
 
+# Fetch SQS queue URL for env file
+SQS_QUEUE_URL=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --region "$REGION" \
+    --query 'Stacks[0].Outputs[?OutputKey==`SQSQueueURL`].OutputValue' \
+    --output text)
+
 echo -e "${GREEN}✓ Infrastructure ready${NC}"
 echo "  EC2 Instance: ${EC2_IP}"
 echo "  RDS Database: ${DB_ENDPOINT}"
@@ -174,11 +182,27 @@ echo "  S3 Bucket: ${S3_BUCKET}"
 echo -e "\n${YELLOW}[8/8] Deploying application to EC2...${NC}"
 echo "Waiting for EC2 to be ready (this may take 2-3 minutes)..."
 
+# Resolve instance ID and wait for instance status checks to pass
+EC2_ID=$(aws ec2 describe-instances \
+    --region "$REGION" \
+    --filters "Name=ip-address,Values=${EC2_IP}" \
+    --query 'Reservations[0].Instances[0].InstanceId' \
+    --output text)
+
+if [ "$EC2_ID" != "None" ] && [ -n "$EC2_ID" ]; then
+    echo "Waiting for EC2 instance checks (instance-status-ok)..."
+    aws ec2 wait instance-status-ok --region "$REGION" --instance-ids "$EC2_ID" || true
+fi
+
+# Wait for RDS to be available at the service level before SSH provisioning
+echo "Waiting for RDS service to be available..."
+aws rds wait db-instance-available --db-instance-identifier lpr-database --region "$REGION" || true
+
 # Wait for EC2 to be accessible
 MAX_RETRIES=30
 RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "${KEY_NAME}.pem" "ubuntu@${EC2_IP}" "echo 'SSH Ready'" 2>/dev/null; then
+    if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -i "$KEY_FILE" ubuntu@${EC2_IP} "echo 'SSH Ready'" 2>/dev/null; then
         break
     fi
     RETRY_COUNT=$((RETRY_COUNT + 1))
@@ -192,12 +216,21 @@ fi
 
 echo -e "${GREEN}✓ EC2 instance accessible${NC}"
 
-# Create deployment package
+# Build frontend locally to avoid OOM on EC2
+echo "Building frontend locally..."
+cd "$PROJECT_DIR/frontend"
+if ! command -v npm &> /dev/null; then
+    echo -e "${RED}✗ Node.js/npm not found. Please install Node.js: https://nodejs.org/${NC}"
+    exit 1
+fi
+npm install
+npm run build -- --configuration production
+
+# Create deployment package (include built dist)
 echo "Creating deployment package..."
-cd "$SCRIPT_DIR"
+cd "$PROJECT_DIR"
 tar -czf /tmp/lpr-app.tar.gz \
     --exclude='node_modules' \
-    --exclude='dist' \
     --exclude='.angular' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
@@ -210,11 +243,11 @@ tar -czf /tmp/lpr-app.tar.gz \
 
 # Upload and extract on EC2
 echo "Uploading application code..."
-scp -o StrictHostKeyChecking=no -i "${KEY_NAME}.pem" /tmp/lpr-app.tar.gz "ubuntu@${EC2_IP}:/tmp/"
+scp -o StrictHostKeyChecking=no -i "$KEY_FILE" /tmp/lpr-app.tar.gz "ubuntu@${EC2_IP}:/tmp/"
 
 # Run deployment on EC2
 echo "Installing application on EC2..."
-ssh -o StrictHostKeyChecking=no -i "${KEY_NAME}.pem" "ubuntu@${EC2_IP}" << ENDSSH
+ssh -o StrictHostKeyChecking=no -i "$KEY_FILE" ubuntu@${EC2_IP} << ENDSSH
     set -e
     
     # Extract application
@@ -224,37 +257,51 @@ ssh -o StrictHostKeyChecking=no -i "${KEY_NAME}.pem" "ubuntu@${EC2_IP}" << ENDSS
     sudo tar -xzf /tmp/lpr-app.tar.gz
     sudo chown -R ubuntu:ubuntu /opt/lpr-app
     
-    # Create environment file
-    cat > /opt/lpr-app/.env << 'EOF'
+    # Create environment file with interpolated values
+    cat > /opt/lpr-app/.env <<EOF
 AWS_REGION=${REGION}
 S3_BUCKET=${S3_BUCKET}
+SQS_QUEUE_URL=${SQS_QUEUE_URL}
 DB_HOST=${DB_ENDPOINT}
 DB_PORT=3306
 DB_NAME=license_plates_db
 DB_USER=admin
 DB_PASSWORD=${DB_PASSWORD}
 LOCAL_MODE=false
+ASYNC_PROCESSING=true
 ALPR_COUNTRY=eu
 UPLOAD_DIR=/opt/lpr-app/backend/uploads
 LOG_LEVEL=INFO
 LOG_FILE=/opt/lpr-app/backend/logs/app.log
+WORKER_LOG_FILE=/opt/lpr-app/backend/logs/worker.log
 EOF
+    
+    # Load env for subsequent commands
+    set -a
+    . /opt/lpr-app/.env
+    set +a
     
     # Run provisioning script
     cd /opt/lpr-app/deployment
     chmod +x provision-ec2.sh
-    sudo bash provision-ec2.sh
+    bash provision-ec2.sh
     
-    # Initialize database
-    sleep 10
-    mysql -h ${DB_ENDPOINT} -u admin -p${DB_PASSWORD} < init-db.sql
+    # Wait for RDS and initialize database
+    echo "Waiting for RDS to accept connections at \$DB_HOST..."
+    nc -z -w 3 "\$DB_HOST" 3306 || true
+    ATTEMPTS=0
+    until mysql --connect-timeout=5 -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" -e 'SELECT 1' >/dev/null 2>&1; do
+        ATTEMPTS=\$((ATTEMPTS+1))
+        if [ \$ATTEMPTS -ge 60 ]; then
+            echo "Failed to connect to RDS after waiting."
+            exit 1
+        fi
+        sleep 5
+    done
+    echo "RDS is ready. Initializing schema..."
+    mysql -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" < /opt/lpr-app/deployment/init-db.sql
     
-    # Build frontend
-    cd /opt/lpr-app/frontend
-    npm install
-    npm run build -- --configuration production
-    
-    # Configure nginx
+    # Configure nginx (frontend already built locally)
     sudo tee /etc/nginx/sites-available/lpr-frontend > /dev/null << 'NGINX_EOF'
 server {
     listen 80 default_server;
@@ -273,15 +320,15 @@ server {
     location /api/ {
         proxy_pass http://localhost:5000/api/;
         proxy_http_version 1.1;
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_read_timeout 300s;
         client_max_body_size 50M;
     }
 
     location / {
-        try_files \\\$uri \\\$uri/ /index.html;
+        try_files \$uri \$uri/ /index.html;
     }
 }
 NGINX_EOF
@@ -291,8 +338,9 @@ NGINX_EOF
     sudo nginx -t
     sudo systemctl reload nginx
     
-    # Start backend service
+    # Start backend and worker services
     sudo systemctl restart lpr-backend
+    sudo systemctl restart lpr-worker
     
     echo "Deployment complete!"
 ENDSSH
