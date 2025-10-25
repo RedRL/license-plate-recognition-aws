@@ -356,9 +356,16 @@ def query_cars():
                 
                 results = []
                 for row in rows:
+                    # Convert datetime to ISO format string if it's a datetime object
+                    time_value = row[1]
+                    if time_value and hasattr(time_value, 'isoformat'):
+                        time_value = time_value.isoformat()
+                    elif time_value:
+                        time_value = str(time_value)
+                    
                     results.append({
                         'id': row[0],
-                        'time': row[1],
+                        'time': time_value,
                         'licensePlate': row[2],
                         'color': row[3],
                         'make': row[4],
@@ -379,9 +386,16 @@ def query_cars():
                     
                     results = []
                     for row in rows:
+                        # Convert datetime to ISO format string if it's a datetime object
+                        time_value = row[1]
+                        if time_value and hasattr(time_value, 'isoformat'):
+                            time_value = time_value.isoformat()
+                        elif time_value:
+                            time_value = str(time_value)
+                        
                         results.append({
                             'id': row[0],
-                            'time': row[1],
+                            'time': time_value,
                             'licensePlate': row[2],
                             'color': row[3],
                             'make': row[4],

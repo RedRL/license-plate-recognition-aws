@@ -110,10 +110,19 @@ export class UploadImageComponent {
           if (results && results.length > 0) {
             const latestResult = results[0]; // Results are ordered by timestamp DESC
             
+            console.log('Latest result:', latestResult);
+            console.log('Latest result time:', latestResult.time);
+            console.log('Upload timestamp:', timestamp);
+            
             // Check if this is recent enough (within last minute)
             const resultTime = new Date(latestResult.time);
             const uploadTime = new Date(timestamp);
             const timeDiff = Math.abs(resultTime.getTime() - uploadTime.getTime());
+            
+            console.log('Result time parsed:', resultTime);
+            console.log('Upload time parsed:', uploadTime);
+            console.log('Time diff (ms):', timeDiff);
+            console.log('Within 2 min?', timeDiff < 120000);
             
             if (timeDiff < 120000) { // Within 2 minutes
               // Found our result!
@@ -126,6 +135,8 @@ export class UploadImageComponent {
                 color: latestResult.color ?? null
               };
               return; // Stop polling
+            } else {
+              console.log('Result too old, continuing to poll...');
             }
           }
           

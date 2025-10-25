@@ -65,11 +65,11 @@ console_handler.setLevel(numeric_level)
 console_handler.setFormatter(formatter)
 root_logger.addHandler(console_handler)
 
-# File handler
-file_handler = RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
-file_handler.setLevel(numeric_level)
-file_handler.setFormatter(formatter)
-root_logger.addHandler(file_handler)
+# File handler - disabled, systemd handles logging via StandardOutput/Error
+# file_handler = RotatingFileHandler(LOG_FILE, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+# file_handler.setLevel(numeric_level)
+# file_handler.setFormatter(formatter)
+# root_logger.addHandler(file_handler)
 
 # ============================================================================
 # Global state
@@ -211,7 +211,7 @@ def poll_sqs_queue():
             QueueUrl=SQS_QUEUE_URL,
             MaxNumberOfMessages=WORKER_MAX_MESSAGES,
             WaitTimeSeconds=WORKER_POLL_INTERVAL,
-            VisibilityTimeoutSeconds=VISIBILITY_TIMEOUT
+            VisibilityTimeout=VISIBILITY_TIMEOUT
         )
         
         messages = response.get('Messages', [])
