@@ -17,6 +17,7 @@ set -euo pipefail
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BOLD='\033[1m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
@@ -29,7 +30,7 @@ KEY_FILE="${SCRIPT_DIR}/${KEY_NAME}.pem"
 
 echo -e "${CYAN}"
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║   License Plate Recognition - AWS Deployment Script           ║"
+echo "║   License Plate Recognition - AWS Deployment Script            ║"
 echo "║   Complete automated deployment to AWS                         ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -104,11 +105,19 @@ else
     echo -e "${GREEN}✓ Your IP: ${MY_IP}${NC}"
 fi
 
-# Generate database password
-echo -e "\n${YELLOW}[4/8] Generating database password...${NC}"
+# Generate or reuse database password
+echo -e "\n${YELLOW}[4/8] Setting up database password...${NC}"
 
-DB_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
-echo -e "${GREEN}✓ Database password generated${NC}"
+PASSWORD_FILE="${SCRIPT_DIR}/.db-password"
+if [ -f "$PASSWORD_FILE" ]; then
+    DB_PASSWORD=$(cat "$PASSWORD_FILE")
+    echo -e "${GREEN}✓ Reusing existing database password${NC}"
+else
+    DB_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
+    echo "$DB_PASSWORD" > "$PASSWORD_FILE"
+    chmod 600 "$PASSWORD_FILE"
+    echo -e "${GREEN}✓ Database password generated and saved${NC}"
+fi
 
 # Check for existing stack
 echo -e "\n${YELLOW}[5/8] Checking for existing CloudFormation stack...${NC}"
@@ -166,17 +175,25 @@ S3_BUCKET=$(aws cloudformation describe-stacks \
     --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
     --output text)
 
-# Fetch SQS queue URL for env file
+# Fetch SQS queue URLs
 SQS_QUEUE_URL=$(aws cloudformation describe-stacks \
     --stack-name "$STACK_NAME" \
     --region "$REGION" \
     --query 'Stacks[0].Outputs[?OutputKey==`SQSQueueURL`].OutputValue' \
     --output text)
 
+SQS_DLQ_URL=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --region "$REGION" \
+    --query 'Stacks[0].Outputs[?OutputKey==`SQSDeadLetterQueueURL`].OutputValue' \
+    --output text)
+
 echo -e "${GREEN}✓ Infrastructure ready${NC}"
 echo "  EC2 Instance: ${EC2_IP}"
 echo "  RDS Database: ${DB_ENDPOINT}"
 echo "  S3 Bucket: ${S3_BUCKET}"
+echo "  SQS Queue: ${SQS_QUEUE_URL}"
+echo "  SQS DLQ: ${SQS_DLQ_URL}"
 
 # Deploy application code to EC2
 echo -e "\n${YELLOW}[8/8] Deploying application to EC2...${NC}"
@@ -216,21 +233,12 @@ fi
 
 echo -e "${GREEN}✓ EC2 instance accessible${NC}"
 
-# Build frontend locally to avoid OOM on EC2
-echo "Building frontend locally..."
-cd "$PROJECT_DIR/frontend"
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}✗ Node.js/npm not found. Please install Node.js: https://nodejs.org/${NC}"
-    exit 1
-fi
-npm install
-npm run build -- --configuration production
-
-# Create deployment package (include built dist)
+# Create deployment package (frontend will be built on EC2)
 echo "Creating deployment package..."
 cd "$PROJECT_DIR"
 tar -czf /tmp/lpr-app.tar.gz \
     --exclude='node_modules' \
+    --exclude='dist' \
     --exclude='.angular' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
@@ -286,17 +294,27 @@ EOF
     chmod +x provision-ec2.sh
     bash provision-ec2.sh
     
+    # Build frontend on EC2
+    echo "Building frontend on EC2..."
+    cd /opt/lpr-app/frontend
+    npm install
+    npm run build -- --configuration production
+    
     # Wait for RDS and initialize database
     echo "Waiting for RDS to accept connections at \$DB_HOST..."
-    nc -z -w 3 "\$DB_HOST" 3306 || true
     ATTEMPTS=0
-    until mysql --connect-timeout=5 -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" -e 'SELECT 1' >/dev/null 2>&1; do
+    until mysql --connect-timeout=10 -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" -e 'SELECT 1' >/dev/null 2>&1; do
         ATTEMPTS=\$((ATTEMPTS+1))
-        if [ \$ATTEMPTS -ge 60 ]; then
-            echo "Failed to connect to RDS after waiting."
+        if [ \$ATTEMPTS -ge 30 ]; then
+            echo "Failed to connect to RDS after \$ATTEMPTS attempts."
+            echo "Testing network connectivity..."
+            nc -zv "\$DB_HOST" 3306 || echo "Port 3306 not reachable"
+            echo "Attempting one more connection with verbose output..."
+            mysql --connect-timeout=10 -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" -e 'SELECT 1' 2>&1 | head -10
             exit 1
         fi
-        sleep 5
+        echo "Attempt \$ATTEMPTS/30 failed, retrying in 10 seconds..."
+        sleep 10
     done
     echo "RDS is ready. Initializing schema..."
     mysql -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" < /opt/lpr-app/deployment/init-db.sql
@@ -334,7 +352,7 @@ server {
 NGINX_EOF
     
     sudo rm -f /etc/nginx/sites-enabled/*
-    sudo ln -sf /etc/nginx/sites-available/lpr-frontend /etc/nginx/sites-enabled/lpr-frontend
+    sudo ln -sf /etc/nginx/sites-available/lpr-frontend /etc/nginx/sites-enabled/
     sudo nginx -t
     sudo systemctl reload nginx
     
@@ -347,36 +365,7 @@ ENDSSH
 
 rm -f /tmp/lpr-app.tar.gz
 
-# Final summary
-echo -e "\n${GREEN}"
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║              DEPLOYMENT SUCCESSFUL! 🎉                         ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
-echo -e "${NC}"
-echo ""
-echo -e "${CYAN}Your application is now live!${NC}"
-echo ""
-echo -e "  🌐 Web Application: ${GREEN}http://${EC2_IP}${NC}"
-echo ""
-echo -e "${CYAN}Infrastructure Details:${NC}"
-echo -e "  📦 EC2 Instance: ${EC2_IP}"
-echo -e "  🗄️  RDS Database: ${DB_ENDPOINT}"
-echo -e "  💾 S3 Bucket: ${S3_BUCKET}"
-echo -e "  🔑 SSH Key: ${KEY_NAME}.pem"
-echo ""
-echo -e "${CYAN}SSH Access:${NC}"
-echo -e "  ssh -i ${KEY_NAME}.pem ubuntu@${EC2_IP}"
-echo ""
-echo -e "${CYAN}Database Connection:${NC}"
-echo -e "  Host: ${DB_ENDPOINT}"
-echo -e "  User: admin"
-echo -e "  Password: ${DB_PASSWORD}"
-echo -e "  Database: license_plates_db"
-echo ""
-echo -e "${YELLOW}⚠️  Save these credentials in a secure location!${NC}"
-echo ""
-
-# Save credentials to file
+# Save credentials to file first
 CREDS_FILE="${SCRIPT_DIR}/aws-credentials.txt"
 cat > "$CREDS_FILE" << EOF
 License Plate Recognition - AWS Credentials
@@ -394,11 +383,47 @@ Database Name: license_plates_db
 
 S3 Bucket: ${S3_BUCKET}
 
+SQS Queue: ${SQS_QUEUE_URL}
+SQS Dead Letter Queue: ${SQS_DLQ_URL}
+
 Region: ${REGION}
 CloudFormation Stack: ${STACK_NAME}
 EOF
 
+# Final summary
+echo -e "\n${GREEN}"
+echo "╔════════════════════════════════════════════════════════════════╗"
+echo "║              DEPLOYMENT SUCCESSFUL! 🎉                         ║"
+echo "╚════════════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+echo ""
+echo -e "${CYAN}Infrastructure Details:${NC}"
+echo -e "  📦 EC2 Instance: ${EC2_IP}"
+echo -e "  🗄️  RDS Database: ${DB_ENDPOINT}"
+echo -e "  💾 S3 Bucket: ${S3_BUCKET}"
+echo -e "  📨 SQS Queue: ${SQS_QUEUE_URL}"
+echo -e "  ⚠️  SQS DLQ: ${SQS_DLQ_URL}"
+echo -e "  🔑 SSH Key: ${KEY_NAME}.pem"
+echo ""
+echo -e "${CYAN}SSH Access:${NC}"
+echo -e "  ssh -i ${KEY_NAME}.pem ubuntu@${EC2_IP}"
+echo ""
+echo -e "${CYAN}Database Connection:${NC}"
+echo -e "  Host: ${DB_ENDPOINT}"
+echo -e "  User: admin"
+echo -e "  Password: ${DB_PASSWORD}"
+echo -e "  Database: license_plates_db"
+echo ""
 echo -e "${GREEN}✓ Credentials saved to: ${CREDS_FILE}${NC}"
+echo ""
+echo -e "${YELLOW}⚠️  Save these credentials in a secure location!${NC}"
+echo ""
+echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}Your application is now live at:${NC}"
+echo ""
+echo -e "  🌐 ${GREEN}${BOLD}http://${EC2_IP}${NC}"
+echo ""
+echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
 

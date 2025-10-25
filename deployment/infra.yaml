@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Complete License Plate Recognition System - RDS, EC2, S3, IAM, Security Groups'
+Description: 'Complete License Plate Recognition System - RDS, EC2, S3, SQS, IAM, Security Groups'
 
 Parameters:
   KeyName:
