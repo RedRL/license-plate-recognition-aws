@@ -88,7 +88,7 @@ ssh -o StrictHostKeyChecking=no -i "$KEY_FILE" ubuntu@${EC2_IP} << ENDSSH
     sudo chown -R ubuntu:ubuntu /opt/lpr-app
     
     # Create environment file
-    cat > /opt/lpr-app/.env << 'EOF'
+    cat > /opt/lpr-app/.env << EOF
 AWS_REGION=${REGION}
 S3_BUCKET=${S3_BUCKET}
 SQS_QUEUE_URL=${SQS_QUEUE_URL}
@@ -110,6 +110,58 @@ EOF
     cd /opt/lpr-app/deployment
     chmod +x provision-ec2.sh
     bash provision-ec2.sh
+    
+    # Build frontend on EC2 (ensures Angular dist exists)
+    echo "Building frontend on EC2..."
+    cd /opt/lpr-app/frontend
+    npm install
+    npm run build -- --configuration production
+    
+    # Ensure nginx points to the correct dist path and reload
+    sudo tee /etc/nginx/sites-available/lpr-frontend > /dev/null << 'NGINX_EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root /opt/lpr-app/frontend/dist/new-front/browser;
+    index index.html;
+    client_max_body_size 50M;
+
+    location /uploads/ {
+        alias /opt/lpr-app/backend/uploads/;
+        access_log off;
+        expires 1h;
+    }
+
+    location /api/ {
+        proxy_pass http://localhost:5000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 300s;
+        client_max_body_size 50M;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+NGINX_EOF
+    
+    sudo rm -f /etc/nginx/sites-enabled/default
+    sudo ln -sf /etc/nginx/sites-available/lpr-frontend /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl reload nginx
+    
+    # Initialize database schema
+    set -a
+    . /opt/lpr-app/.env
+    set +a
+    echo "Initializing database schema..."
+    mysql --connect-timeout=10 -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;" || true
+    mysql --connect-timeout=10 -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" < /opt/lpr-app/deployment/init-db.sql
     
     # Start services
     sudo systemctl restart lpr-backend

@@ -165,36 +165,33 @@ sudo tee /etc/nginx/sites-available/lpr-frontend > /dev/null << 'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-
     server_name _;
 
-    root /opt/lpr-app/frontend/dist/frontend/browser;
+    root /opt/lpr-app/frontend/dist/new-front/browser;
     index index.html;
+    client_max_body_size 50M;
 
-    # Serve Angular app
-    location / {
-        try_files $uri $uri/ /index.html;
+    # Serve uploaded files
+    location /uploads/ {
+        alias /opt/lpr-app/backend/uploads/;
+        access_log off;
+        expires 1h;
     }
 
     # Proxy API requests to Flask backend
     location /api/ {
         proxy_pass http://localhost:5000/api/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
+        client_max_body_size 50M;
     }
 
-    # Serve uploaded files (if needed)
-    location /uploads/ {
-        alias /opt/lpr-app/backend/uploads/;
-        autoindex off;
+    # Angular routing
+    location / {
+        try_files $uri $uri/ /index.html;
     }
 }
 EOF
