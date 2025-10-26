@@ -42,8 +42,11 @@ New folder/
 
 # AWS credentials and keys
 *.pem
-lpr-keypair.pem
 aws-credentials.txt
+deployment/.db-password
+
+# Optional local secrets folder if used inside repo
+secrets/
 
 # Temporary deployment files
 frontend-dist-*.tar.gz

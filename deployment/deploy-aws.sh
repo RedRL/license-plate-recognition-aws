@@ -25,8 +25,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 STACK_NAME="LicensePlateStack"
 REGION="eu-central-1"
-KEY_NAME="lpr-keypair-sshfix"
-KEY_FILE="${SCRIPT_DIR}/${KEY_NAME}.pem"
+KEY_NAME="lpr-keypair"
+
+# Secrets directory (cross-platform). Prefer ~/.secrets/lpr; fallback to derived USERPROFILE
+if [[ "${HOME:-}" == /* ]]; then
+    SECRETS_DIR="${HOME}/.secrets/lpr"
+else
+    if [ -n "${USERPROFILE:-}" ]; then
+        WIN_HOME="${USERPROFILE//\\/\/}"
+        DRIVE="${WIN_HOME%%:*}"
+        PATH_PART="${WIN_HOME#*:}"
+        SECRETS_DIR="/${DRIVE,,}${PATH_PART}/.secrets/lpr"
+    else
+        SECRETS_DIR="${SCRIPT_DIR}/.secrets/lpr"
+    fi
+fi
+mkdir -p "$SECRETS_DIR" 2>/dev/null || true
+chmod 700 "$SECRETS_DIR" 2>/dev/null || true
+KEY_FILE="${SECRETS_DIR}/${KEY_NAME}.pem"
 
 echo -e "${CYAN}"
 echo "╔════════════════════════════════════════════════════════════════╗"
@@ -69,26 +85,40 @@ echo -e "${GREEN}✓ All required files present${NC}"
 # Handle EC2 Key Pair
 echo -e "\n${YELLOW}[2/8] Setting up EC2 key pair...${NC}"
 
+RECREATE_NEEDED=false
 if aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$REGION" &> /dev/null; then
     echo -e "${GREEN}✓ Key pair '$KEY_NAME' already exists${NC}"
+    if [ ! -f "$KEY_FILE" ] || [ "${FORCE_RECREATE_KEY:-false}" = "true" ]; then
+        echo -e "${YELLOW}⚠ Local PEM missing or force recreate requested. Regenerating key pair...${NC}"
+        aws ec2 delete-key-pair --key-name "$KEY_NAME" --region "$REGION" >/dev/null 2>&1 || true
+        RECREATE_NEEDED=true
+    fi
 else
+    RECREATE_NEEDED=true
+fi
+
+if [ "$RECREATE_NEEDED" = true ]; then
     echo "Creating new key pair: $KEY_NAME"
     KEY_MATERIAL=$(aws ec2 create-key-pair \
         --key-name "$KEY_NAME" \
         --region "$REGION" \
         --query 'KeyMaterial' \
         --output text 2>&1)
-    
     if [ $? -eq 0 ]; then
-        KEY_FILE="${SCRIPT_DIR}/${KEY_NAME}.pem"
-        echo "$KEY_MATERIAL" > "$KEY_FILE" 2>/dev/null || {
-            echo -e "${YELLOW}⚠ Could not save key to ${KEY_FILE}${NC}"
-            echo -e "${YELLOW}⚠ Key created in AWS but not saved locally${NC}"
-            echo -e "${YELLOW}⚠ You can download it from AWS Console if needed${NC}"
-        }
+        # Ensure directory exists
+        mkdir -p "$(dirname "$KEY_FILE")" 2>/dev/null || true
+        # If file exists and may be read-only, make it writable or remove it
         if [ -f "$KEY_FILE" ]; then
-            chmod 400 "$KEY_FILE"
+            chmod u+w "$KEY_FILE" 2>/dev/null || true
+            rm -f "$KEY_FILE" 2>/dev/null || true
+        fi
+        # Save (overwrite) local PEM and validate
+        if printf '%s\n' "$KEY_MATERIAL" > "$KEY_FILE" 2>/dev/null; then
+            chmod 400 "$KEY_FILE" 2>/dev/null || true
             echo -e "${GREEN}✓ Key pair created and saved to: ${KEY_FILE}${NC}"
+        else
+            echo -e "${RED}✗ Failed to save key to ${KEY_FILE}${NC}"
+            exit 1
         fi
     fi
 fi
@@ -403,10 +433,10 @@ echo -e "  🗄️  RDS Database: ${DB_ENDPOINT}"
 echo -e "  💾 S3 Bucket: ${S3_BUCKET}"
 echo -e "  📨 SQS Queue: ${SQS_QUEUE_URL}"
 echo -e "  ⚠️  SQS DLQ: ${SQS_DLQ_URL}"
-echo -e "  🔑 SSH Key: ${KEY_NAME}.pem"
+echo -e "  🔑 SSH Key: ${KEY_FILE}"
 echo ""
 echo -e "${CYAN}SSH Access:${NC}"
-echo -e "  ssh -i ${KEY_NAME}.pem ubuntu@${EC2_IP}"
+echo -e "  ssh -i ${KEY_FILE} ubuntu@${EC2_IP}"
 echo ""
 echo -e "${CYAN}Database Connection:${NC}"
 echo -e "  Host: ${DB_ENDPOINT}"

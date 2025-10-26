@@ -6,7 +6,7 @@ set -e
 # Configuration
 REGION="eu-central-1"
 STACK_NAME="LicensePlateStack"
-KEY_NAME="lpr-keypair-sshfix"
+KEY_NAME="lpr-keypair"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -71,10 +71,13 @@ tar -czf /tmp/lpr-app.tar.gz \
     backend/ frontend/ deployment/
 
 echo "Uploading application code..."
-scp -o StrictHostKeyChecking=no -i "${SCRIPT_DIR}/${KEY_NAME}.pem" /tmp/lpr-app.tar.gz "ubuntu@${EC2_IP}:/tmp/"
+SECRETS_DIR="${HOME}/.secrets/lpr"
+mkdir -p "$SECRETS_DIR" 2>/dev/null || true
+KEY_FILE="${SECRETS_DIR}/${KEY_NAME}.pem"
+scp -o StrictHostKeyChecking=no -i "$KEY_FILE" /tmp/lpr-app.tar.gz "ubuntu@${EC2_IP}:/tmp/"
 
 echo "Installing application on EC2..."
-ssh -o StrictHostKeyChecking=no -i "${SCRIPT_DIR}/${KEY_NAME}.pem" ubuntu@${EC2_IP} << ENDSSH
+ssh -o StrictHostKeyChecking=no -i "$KEY_FILE" ubuntu@${EC2_IP} << ENDSSH
     set -e
     
     # Extract application
