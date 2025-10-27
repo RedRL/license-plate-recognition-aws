@@ -1,6 +1,6 @@
 # Project Structure
 
-This document describes the clean, consolidated file structure after cleanup.
+This document describes the project structure and file organization.
 
 ## 🚀 Deployment Scripts (All in `deployment/` folder)
 
@@ -16,7 +16,7 @@ This document describes the clean, consolidated file structure after cleanup.
 
 | File | Purpose |
 |------|---------|
-| `deployment/infra.yaml` | CloudFormation template - defines all AWS resources (EC2, RDS, S3, IAM) |
+| `deployment/infra.yaml` | CloudFormation template - defines all AWS resources (EC2, RDS, S3, SQS, IAM) |
 
 ### **Helper Scripts:**
 
@@ -59,48 +59,9 @@ frontend/
 
 | File | Purpose |
 |------|---------|
-| `README.md` | **Main documentation** - quick start, usage, troubleshooting |
-| `PROJECT-STRUCTURE.md` | This file - explains the clean structure |
-
-## 🗑️ What Was Removed
-
-The following redundant files were deleted:
-
-### Redundant Deployment Scripts:
-- `deploy.sh`, `deploy.ps1`, `deploy.bat`
-- `deploy-windows.ps1`
-- `deploy-interactive.sh`
-- `deploy-to-aws.sh`
-- `deploy-complete.sh`, `deploy-complete.bat`, `deploy-complete.ps1`
-- `complete-deploy.ps1`
-- `deploy-cloudshell.sh`
-- `finish-deploy.ps1`
-- `fix-frontend.ps1`
-- `build-and-deploy-frontend.ps1`
-
-### Redundant Helper Scripts:
-- `deployment/check-deployment.sh`
-- `deployment/complete-deployment.sh`
-- `deployment/quick-complete.sh`
-- `deployment/update-app.sh`
-- `deployment/test-aws-services.sh`
-- `deployment/test-db-connection.py`
-- `deployment/query-db.py`
-- `deployment/verify-db.py`
-- `deployment/teardown.sh`
-
-### Redundant Documentation:
-- `AWS-DEPLOYMENT-SUMMARY.md`
-- `DEPLOYMENT.md`
-- `INTERACTIVE-DEPLOYMENT.md`
-- `WINDOWS-DEPLOYMENT.md`
-- `ZERO-SETUP-DEPLOYMENT.md`
-- `START-HERE.md`
-- `QUICK-START.md`
-- `FINISH-DEPLOYMENT-MANUAL.md`
-
-### Other:
-- `deployment-progress.log`
+| `README.md` | **Main documentation** - quick start, deployment, usage |
+| `COST_REPORT.md` | **Cost analysis** - AWS cost modeling and scaling analysis |
+| `PROJECT-STRUCTURE.md` | This file - explains the project structure |
 
 ## 🎯 Simple Decision Tree
 
@@ -116,11 +77,11 @@ The following redundant files were deleted:
 **Want to tear down everything?**
 → See "Cleanup / Teardown" section in README.md
 
-## 📊 File Count Comparison
+## 📊 Quick Overview
 
-**Before cleanup:** 25+ deployment scripts and docs
-**After cleanup:** 3 deployment scripts + 1 README
-
-**Result:** Much cleaner, easier to understand! 🎉
+The project uses a minimal deployment approach with just a few essential scripts:
+- 3 deployment scripts for different scenarios
+- Infrastructure as Code via CloudFormation
+- Clean separation of backend, frontend, and deployment logic
 
 
