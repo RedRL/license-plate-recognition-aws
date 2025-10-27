@@ -114,6 +114,8 @@ def save_to_db(plate, attrs):
     
     try:
         with conn.cursor() as cursor:
+            # Use UTC timestamp to match database expectation
+            utc_timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             cursor.execute("""
                 INSERT INTO plates (plate_number, color, make, model, timestamp)
                 VALUES (%s, %s, %s, %s, %s)
@@ -122,7 +124,7 @@ def save_to_db(plate, attrs):
                 attrs.get('color'),
                 attrs.get('make'),
                 attrs.get('model'),
-                datetime.datetime.now()
+                utc_timestamp
             ))
             conn.commit()
             logging.info(f"Saved to database: plate={plate}, make={attrs.get('make')}, model={attrs.get('model')}, color={attrs.get('color')}")

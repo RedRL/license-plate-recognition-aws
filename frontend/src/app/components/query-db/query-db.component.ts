@@ -158,18 +158,18 @@ export class QueryDbComponent implements OnInit, OnDestroy {
   }
 
   convertUTCToLocal(utcTimeString: string): string {
-    // Parse the UTC time string (supports both "YYYY-MM-DD HH:MM:SS" and ISO format)
+    // Parse the UTC time string (supports ISO format with 'Z' suffix, ISO without Z, and legacy format)
     let utcDate: Date;
     
-    // Check if it's already in ISO format (contains 'T')
-    if (utcTimeString.includes('T')) {
+    // ISO format with 'Z' suffix (e.g., "2025-10-27T12:00:00Z")
+    if (utcTimeString.endsWith('Z') || utcTimeString.includes('T')) {
       utcDate = new Date(utcTimeString);
     } else {
-      // Old format: "YYYY-MM-DD HH:MM:SS"
+      // Legacy format: "YYYY-MM-DD HH:MM:SS" - append ' UTC' to indicate UTC
       utcDate = new Date(utcTimeString + ' UTC');
     }
     
-    // Format to local time
+    // Format to local time using the browser's timezone
     const year = utcDate.getFullYear();
     const month = String(utcDate.getMonth() + 1).padStart(2, '0');
     const day = String(utcDate.getDate()).padStart(2, '0');

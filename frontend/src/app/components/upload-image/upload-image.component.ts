@@ -114,10 +114,17 @@ export class UploadImageComponent {
             console.log('Latest result time:', latestResult.time);
             console.log('Upload timestamp:', timestamp);
             
-            // Check if this is recent enough (within last minute)
+            // Check if this is recent enough (within 2 minutes)
+            // Both timestamps should be in UTC format (ending with 'Z' or '+00:00')
             const resultTime = new Date(latestResult.time);
             const uploadTime = new Date(timestamp);
             const timeDiff = Math.abs(resultTime.getTime() - uploadTime.getTime());
+            
+            // Debug logging
+            console.log('Result time (UTC):', latestResult.time);
+            console.log('Upload time (UTC):', timestamp);
+            console.log('Result time (parsed):', resultTime.toISOString());
+            console.log('Upload time (parsed):', uploadTime.toISOString());
             
             console.log('Result time parsed:', resultTime);
             console.log('Upload time parsed:', uploadTime);

@@ -175,7 +175,7 @@ def upload_image():
     # Check if async processing is enabled
     if ASYNC_PROCESSING and not LOCAL_MODE:
         # Send expect a 202 Accepted response with processing status
-        timestamp = datetime.datetime.now().isoformat()
+        timestamp = datetime.datetime.utcnow().isoformat() + 'Z'
         
         # Send message to SQS queue
         try:
@@ -356,12 +356,20 @@ def query_cars():
                 
                 results = []
                 for row in rows:
-                    # Convert datetime to ISO format string if it's a datetime object
+                    # Return ISO format with UTC timezone indicator for frontend conversion
                     time_value = row[1]
-                    if time_value and hasattr(time_value, 'isoformat'):
-                        time_value = time_value.isoformat()
-                    elif time_value:
-                        time_value = str(time_value)
+                    if time_value:
+                        # Parse timestamp and format as ISO with 'Z' suffix to indicate UTC
+                        if isinstance(time_value, str):
+                            # String format: "YYYY-MM-DD HH:MM:SS"
+                            utc_time = datetime.datetime.strptime(time_value, '%Y-%m-%d %H:%M:%S')
+                            utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+                        else:
+                            # Already a datetime object
+                            utc_time = time_value if time_value.tzinfo else time_value.replace(tzinfo=datetime.timezone.utc)
+                        
+                        # Return as ISO format with 'Z' suffix (UTC)
+                        time_value = utc_time.isoformat()
                     
                     results.append({
                         'id': row[0],
@@ -386,12 +394,20 @@ def query_cars():
                     
                     results = []
                     for row in rows:
-                        # Convert datetime to ISO format string if it's a datetime object
+                        # Return ISO format with UTC timezone indicator for frontend conversion
                         time_value = row[1]
-                        if time_value and hasattr(time_value, 'isoformat'):
-                            time_value = time_value.isoformat()
-                        elif time_value:
-                            time_value = str(time_value)
+                        if time_value:
+                            # Parse timestamp and format as ISO with 'Z' suffix to indicate UTC
+                            if isinstance(time_value, str):
+                                # String format: "YYYY-MM-DD HH:MM:SS"
+                                utc_time = datetime.datetime.strptime(time_value, '%Y-%m-%d %H:%M:%S')
+                                utc_time = utc_time.replace(tzinfo=datetime.timezone.utc)
+                            else:
+                                # Already a datetime object
+                                utc_time = time_value if time_value.tzinfo else time_value.replace(tzinfo=datetime.timezone.utc)
+                            
+                            # Return as ISO format with 'Z' suffix (UTC)
+                            time_value = utc_time.isoformat()
                         
                         results.append({
                             'id': row[0],
