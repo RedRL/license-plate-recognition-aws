@@ -319,8 +319,13 @@ EOF
     . /opt/lpr-app/.env
     set +a
     
-    # Run provisioning script
+    # Run provisioning script (convert line endings if needed)
     cd /opt/lpr-app/deployment
+    if command -v dos2unix &> /dev/null; then
+        dos2unix provision-ec2.sh
+    else
+        sed -i 's/\r$//' provision-ec2.sh
+    fi
     chmod +x provision-ec2.sh
     bash provision-ec2.sh
     
