@@ -347,7 +347,8 @@ EOF
         sleep 10
     done
     echo "RDS is ready. Initializing schema..."
-    mysql -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" < /opt/lpr-app/deployment/init-db.sql
+    mysql -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS \$DB_NAME;" || true
+    mysql -h "\$DB_HOST" -u "\$DB_USER" -p"\$DB_PASSWORD" "\$DB_NAME" < /opt/lpr-app/deployment/init-db.sql
     
     # Configure nginx (frontend already built locally)
     sudo tee /etc/nginx/sites-available/lpr-frontend > /dev/null << 'NGINX_EOF'

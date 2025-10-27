@@ -33,6 +33,13 @@ fi
 
 log_info "Starting provisioning process..."
 
+# Wait for any concurrent apt processes to complete
+log_info "Waiting for apt processes to complete..."
+while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+    log_info "Waiting for apt lock to be released..."
+    sleep 5
+done
+
 # Update system
 log_info "Updating system packages..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get update -y

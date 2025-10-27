@@ -21,9 +21,6 @@ CREATE TABLE plates (
     INDEX idx_model (model)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Grant necessary permissions
-GRANT SELECT, INSERT, UPDATE, DELETE ON license_plates_db.plates TO 'admin'@'%';
-
 -- Verify table creation
 DESCRIBE plates;
 
