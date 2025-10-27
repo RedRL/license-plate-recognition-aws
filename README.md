@@ -53,6 +53,15 @@ Diagram-style description:
 - Angular Frontend
   - Upload images, query detections, and edit DB entries
 
+## Detection Capabilities
+
+**Currently Implemented:**
+- License plate number recognition (via OpenALPR)
+- Vehicle color detection
+
+**Not Implemented:**
+- Vehicle make/model detection - no reliable free tools available; architecture supports future integration when a cost-effective solution becomes available
+
 ## Design Decisions & Trade-offs
 
 - EC2 vs Lambda
